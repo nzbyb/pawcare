@@ -152,3 +152,41 @@
 2. SSE 流式输出（步骤级或 token 级）与前端增量渲染。
 3. RAG 知识库切片、引用与拒答。
 4. Alembic 初始迁移、PostgreSQL 排他约束、Docker 演示。
+
+## 2026-10-19 · 第 5 天
+
+### 完成
+
+- Agent Runtime 增加可选事件回调，按步骤推送 `llm_start` / `llm_end` / `tool_start` / `tool_end` / `assistant`；
+  回调异常只记日志，不影响 Agent 主流程。
+- 抽取 `prepare_turn` / `finalize_turn`，流式与非流式共用同一套会话落库、历史恢复、草稿回填和 trace 逻辑。
+- 新增 `POST /api/agent/chat/stream`：
+  - 返回 `text/event-stream`，事件包含 `start`、步骤事件、`assistant` 和最终 `done`。
+  - 校验、会话归属和模型配置检查在返回流之前完成，失败仍是普通 JSON 错误。
+  - `stream_turn` 用队列桥接 Agent 回调和 SSE 生成器；客户端断开时取消后台任务。
+  - `X-Accel-Buffering: no`，便于后续 Nginx 部署时关闭缓冲。
+- 前端新增 `streamChat`：`fetch` + `ReadableStream` 解析 SSE，支持跨 chunk 边界和 `\r\n`。
+- 智能助手页改为增量渲染：思考状态、工具执行中 / 完成 chip、最终回复、草稿卡片和 trace 实时更新。
+- 保留非流式 `/agent/chat`，评测和脚本继续使用。
+
+### 验证
+
+- `pytest`：50 passed（新增 3 个流式测试：事件顺序与内容、流前校验、模型异常兜底）。
+- `npm run typecheck`：通过。
+- `npm run build`：通过（AgentView chunk 11.74 kB / gzip 5.42 kB）。
+- 真实 `deepseek-flash` 流式冒烟（隔离副本库）：
+  - `HTTP 200 text/event-stream`。
+  - 事件顺序：`start → llm_start → llm_end → tool_start → tool_end → llm_start → llm_end → assistant → done`。
+  - 第一轮模型 3109ms，`list_my_pets` 3ms，第二轮模型 2137ms。
+  - `done` 携带完整回复、`trace_id` 和 2 只宠物的工具轨迹，与非流式响应结构一致。
+
+### 提交
+
+- 待填
+
+### 下一步
+
+1. RAG 知识库切片、引用与拒答。
+2. 评测集扩充到 80–100 条，增加困难用例与 baseline / 消融。
+3. Alembic 初始迁移、PostgreSQL 排他约束、Docker 演示。
+4. 通知中心（可选）。

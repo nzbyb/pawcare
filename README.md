@@ -12,7 +12,7 @@
 | 数据库 | PostgreSQL 16 + pgvector |
 | 缓存/限流 | Redis 7（可选，未启动时退回进程内存） |
 | 鉴权 | JWT + bcrypt，三角色：宠物主 / 寄养员 / 管理员 |
-| Agent | 显式工具调用循环（httpx + OpenAI 兼容接口），后续可替换为 LangGraph |
+| Agent | 显式工具调用循环 + 步骤级 SSE（httpx + OpenAI 兼容接口），后续可替换为 LangGraph |
 | RAG | pgvector + bge-small-zh-v1.5，回答带引用 |
 | 定时 | APScheduler（单进程） |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
@@ -162,9 +162,9 @@ JSON / CSV 报告写入 `backend/evaluation/reports/`（不入库）。
 - [x] 多轮工具调用循环、会话历史持久化、token / 耗时 / 错误码 trace
 - [x] `POST /api/agent/chat` 与历史会话接口，deepseek-flash 真实冒烟通过
 - [x] 前端智能助手页：多轮对话、工具轨迹、草稿卡片、历史会话切换
+- [x] SSE 流式输出：步骤事件 + 前端增量渲染
 - [x] 评测 harness：29 条 YAML 用例、隔离评测库、JSON / CSV 报告
 - [ ] 通知中心
-- [ ] SSE 流式输出
 - [ ] RAG + 引用
 - [ ] 评测用例扩充到 80–100 条，补 baseline 与消融
 - [ ] Alembic 迁移、Docker 演示

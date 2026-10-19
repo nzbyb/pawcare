@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 from uuid import uuid4
@@ -31,6 +32,19 @@ MAX_HISTORY_MESSAGES = 30
 
 class LLMError(Exception):
     pass
+
+
+EventSink = Callable[[dict], Awaitable[None]]
+
+
+async def _emit(sink: EventSink | None, event: str, data: dict) -> None:
+    """向流式调用方推送步骤事件；回调失败不能影响 Agent 主流程。"""
+    if sink is None:
+        return
+    try:
+        await sink({"event": event, "data": data})
+    except Exception:
+        logger.exception("Agent 事件回调失败")
 
 
 @dataclass
@@ -213,6 +227,7 @@ async def run_agent(
     history: list[dict],
     llm: LLMClient,
     trace_id: str,
+    on_event: EventSink | None = None,
 ) -> AgentRunResult:
     messages = [{"role": "system", "content": build_system_prompt(user)}, *history]
     events: list[dict] = []
@@ -220,52 +235,63 @@ async def run_agent(
 
     max_tool_rounds = max(1, settings.AGENT_MAX_TOOL_CALLS)
 
+    async def finish(
+        content: str,
+        token_in: int = 0,
+        token_out: int = 0,
+        latency_ms: int = 0,
+    ) -> AgentRunResult:
+        _persist_assistant(
+            db,
+            conversation_id,
+            trace_id,
+            content,
+            token_in,
+            token_out,
+            latency_ms,
+        )
+        db.commit()
+        await _emit(on_event, "assistant", {"content": content})
+        return AgentRunResult(
+            content=content,
+            trace_id=trace_id,
+            tool_events=events,
+            draft_id=draft_id,
+        )
+
     for step in range(max_tool_rounds + 1):
         started = time.perf_counter()
+        await _emit(on_event, "llm_start", {"round": step + 1})
         try:
             response = await asyncio.wait_for(
                 llm.complete(messages, TOOL_DEFINITIONS),
                 timeout=settings.AGENT_TIMEOUT_SECONDS + 5,
             )
         except asyncio.TimeoutError:
-            content = _friendly_failure("timeout")
-            _persist_assistant(db, conversation_id, trace_id, content)
-            db.commit()
-            return AgentRunResult(
-                content=content, trace_id=trace_id, tool_events=events, draft_id=draft_id
-            )
+            return await finish(_friendly_failure("timeout"))
         except Exception:
             logger.exception("LLM 调用异常")
-            content = _friendly_failure("error")
-            _persist_assistant(db, conversation_id, trace_id, content)
-            db.commit()
-            return AgentRunResult(
-                content=content, trace_id=trace_id, tool_events=events, draft_id=draft_id
-            )
+            return await finish(_friendly_failure("error"))
 
         latency_ms = int((time.perf_counter() - started) * 1000)
+        await _emit(
+            on_event,
+            "llm_end",
+            {
+                "round": step + 1,
+                "latency_ms": latency_ms,
+                "has_tool_calls": bool(response.tool_calls),
+            },
+        )
 
         if response.tool_calls:
             if step >= max_tool_rounds:
-                content = (
+                return await finish(
                     "这次需要连续查询的内容比较多，我先停在这里。"
-                    "你可以把问题拆小一点，或者直接告诉我想先看哪一部分。"
-                )
-                _persist_assistant(
-                    db,
-                    conversation_id,
-                    trace_id,
-                    content,
+                    "你可以把问题拆小一点，或者直接告诉我想先看哪一部分。",
                     response.token_in,
                     response.token_out,
                     latency_ms,
-                )
-                db.commit()
-                return AgentRunResult(
-                    content=content,
-                    trace_id=trace_id,
-                    tool_events=events,
-                    draft_id=draft_id,
                 )
 
             wire_calls = _wire_tool_calls(response.tool_calls)
@@ -288,6 +314,11 @@ async def run_agent(
             )
 
             for call in response.tool_calls:
+                await _emit(
+                    on_event,
+                    "tool_start",
+                    {"name": call.name, "arguments": call.arguments},
+                )
                 tool_started = time.perf_counter()
                 context = ToolContext(
                     trace_id=trace_id,
@@ -343,31 +374,16 @@ async def run_agent(
                 )
                 if result.get("ok") and call.name == "create_boarding_draft":
                     draft_id = (result.get("data") or {}).get("draft_id")
+                await _emit(on_event, "tool_end", events[-1])
             db.commit()
             continue
 
-        content = response.content or "我暂时没有生成回答，请换个说法再试一次。"
-        _persist_assistant(
-            db,
-            conversation_id,
-            trace_id,
-            content,
+        return await finish(
+            response.content or "我暂时没有生成回答，请换个说法再试一次。",
             response.token_in,
             response.token_out,
             latency_ms,
         )
-        db.commit()
-        return AgentRunResult(
-            content=content,
-            trace_id=trace_id,
-            tool_events=events,
-            draft_id=draft_id,
-        )
 
     # 理论上到不了这里，保留兜底。
-    content = "这次对话没有顺利结束，请稍后再试。"
-    _persist_assistant(db, conversation_id, trace_id, content)
-    db.commit()
-    return AgentRunResult(
-        content=content, trace_id=trace_id, tool_events=events, draft_id=draft_id
-    )
+    return await finish("这次对话没有顺利结束，请稍后再试。")

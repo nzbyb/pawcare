@@ -89,6 +89,24 @@ RAG 阶段再加入 `search_care_knowledge`，返回切片与引用；它同样�
 - Trace：记录 `trace_id`、工具名、参数、结果摘要、耗时、token、错误码。
 - 审计：健康档案修改、草稿确认、入住/退房等关键操作写 `audit_logs`。
 
+### 5.1 流式输出
+
+`POST /api/agent/chat/stream` 返回 `text/event-stream`，事件顺序如下：
+
+| 事件 | 时机 | 数据 |
+|---|---|---|
+| `start` | 用户消息落库后 | `conversation_id`、`trace_id` |
+| `llm_start` / `llm_end` | 每轮模型调用前后 | 轮次、耗时、是否产生工具调用 |
+| `tool_start` / `tool_end` | 每个工具执行前后 | 工具名、参数、状态、摘要、耗时 |
+| `assistant` | 最终回复落库后 | 完整回复文本 |
+| `done` | 本轮结束 | 与 `/agent/chat` 相同的完整响应 |
+| `error` | 流内异常 | 友好错误文案 |
+
+- 校验、会话归属和模型配置检查在返回流之前完成，失败仍是普通 JSON 错误。
+- 流式与非流式共用 `prepare_turn` / `run_agent` / `finalize_turn`，持久化和 trace 行为一致。
+- 客户端断开时取消后台 Agent 任务；已落库的消息保留，未完成轮次不产生最终回复。
+- 非流式 `/agent/chat` 保留，供评测和脚本调用。
+
 ## 6. 评测（论文阶段）
 
 - 当前 harness：`backend/evaluation/`，YAML 用例 + 独立 SQLite 副本 + 真实模型 + JSON / CSV 报告。

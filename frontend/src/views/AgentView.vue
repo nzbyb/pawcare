@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NInput, NTag } from 'naive-ui'
 
-import { chat, getConversation, listConversations } from '@/api/agent'
+import { getConversation, listConversations, streamChat } from '@/api/agent'
 import type {
   AgentConversation,
   AgentToolEvent,
@@ -55,7 +55,7 @@ const roadmap = [
   { label: '寄养草稿与确认接口', done: true },
   { label: 'Agent 工具层与多轮调用', done: true },
   { label: '会话持久化与 trace', done: true },
-  { label: 'SSE 流式输出', done: false },
+  { label: 'SSE 流式输出', done: true },
   { label: 'RAG 知识库与引用', done: false },
   { label: '评测集与消融实验', done: false },
 ]
@@ -76,6 +76,7 @@ const conversationId = ref<number | null>(null)
 const input = ref('')
 const sending = ref(false)
 const loadingHistory = ref(false)
+const streamingBubbleId = ref<number | null>(null)
 const bodyRef = ref<HTMLElement | null>(null)
 let nextId = 1
 
@@ -175,24 +176,105 @@ async function send(text?: string): Promise<void> {
   sending.value = true
   await scrollToBottom()
 
+  const streamState: { bubbleId: number | null } = { bubbleId: null }
+  let completed = false
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), 180_000)
+
+  function ensureBubble(): ChatBubble {
+    const existing =
+      streamState.bubbleId === null
+        ? undefined
+        : messages.value.find((item) => item.id === streamState.bubbleId)
+    if (existing) return existing
+    const created = addMessage('assistant', '')
+    streamState.bubbleId = created.id
+    streamingBubbleId.value = created.id
+    return created
+  }
+
+  function upsertTool(event: AgentToolEvent): void {
+    const target = ensureBubble()
+    const events = [...(target.toolEvents ?? [])]
+    const index = events.findIndex(
+      (item) => item.name === event.name && item.status === 'running',
+    )
+    if (index >= 0) events[index] = event
+    else events.push(event)
+    target.toolEvents = events
+    void scrollToBottom()
+  }
+
+  const failureText =
+    '抱歉，这次请求没有完成。请稍后再试，或者把问题说得更具体一点。'
+
   try {
-    const result = await chat({
-      ...(conversationId.value ? { conversation_id: conversationId.value } : {}),
-      messages: [{ role: 'user', content }],
-    })
-    conversationId.value = result.conversation_id
-    addMessage('assistant', result.content, {
-      toolEvents: result.tool_events,
-      draft: result.draft,
-      traceId: result.trace_id,
-    })
+    await streamChat(
+      {
+        ...(conversationId.value
+          ? { conversation_id: conversationId.value }
+          : {}),
+        messages: [{ role: 'user', content }],
+      },
+      (event, data) => {
+        if (event === 'start') {
+          const target = ensureBubble()
+          target.traceId = String(data.trace_id ?? '')
+          const id = Number(data.conversation_id)
+          if (Number.isFinite(id)) conversationId.value = id
+        } else if (event === 'tool_start') {
+          upsertTool({
+            name: String(data.name ?? ''),
+            status: 'running',
+            summary: '正在执行…',
+            latency_ms: null,
+          })
+        } else if (event === 'tool_end') {
+          upsertTool({
+            name: String(data.name ?? ''),
+            status: String(data.status ?? 'ok'),
+            summary: String(data.summary ?? ''),
+            latency_ms:
+              typeof data.latency_ms === 'number' ? data.latency_ms : null,
+          })
+        } else if (event === 'assistant') {
+          ensureBubble().content = String(data.content ?? '')
+          void scrollToBottom()
+        } else if (event === 'done') {
+          const target = ensureBubble()
+          target.content = String(data.content ?? '')
+          target.toolEvents = (data.tool_events ?? []) as AgentToolEvent[]
+          target.draft = (data.draft ?? null) as BoardingDraft | null
+          target.traceId = String(data.trace_id ?? '')
+          const id = Number(data.conversation_id)
+          if (Number.isFinite(id)) conversationId.value = id
+          completed = true
+          streamingBubbleId.value = null
+          void scrollToBottom()
+        } else if (event === 'error') {
+          ensureBubble().content = String(
+            data.message ?? '助手暂时不可用，请稍后再试。',
+          )
+          streamingBubbleId.value = null
+        }
+      },
+      { signal: controller.signal },
+    )
+    if (!completed) throw new Error('流式响应未完成')
     await loadConversations()
   } catch {
-    addMessage(
-      'assistant',
-      '抱歉，这次请求没有完成。请稍后再试，或者把问题说得更具体一点。',
-    )
+    const failed =
+      streamState.bubbleId === null
+        ? undefined
+        : messages.value.find((item) => item.id === streamState.bubbleId)
+    if (failed && !failed.content) {
+      failed.content = failureText
+    } else if (!failed) {
+      addMessage('assistant', failureText)
+    }
   } finally {
+    window.clearTimeout(timer)
+    streamingBubbleId.value = null
     sending.value = false
     await scrollToBottom()
   }
@@ -282,15 +364,26 @@ onMounted(() => {
             <span v-if="bubble.role === 'assistant'" class="bubble-avatar">🐾</span>
             <div class="bubble" :class="bubble.role">
               <div class="bubble-text" v-html="renderMessage(bubble.content)"></div>
+              <div
+                v-if="bubble.id === streamingBubbleId && !bubble.content"
+                class="stream-status"
+              >
+                正在思考并调用工具…
+              </div>
 
               <div v-if="bubble.toolEvents?.length" class="tool-events">
                 <span
                   v-for="(event, index) in bubble.toolEvents"
                   :key="`${bubble.id}-${index}`"
                   class="tool-chip"
-                  :class="{ error: event.status === 'error' }"
+                  :class="{
+                    error: event.status === 'error',
+                    running: event.status === 'running',
+                  }"
                 >
-                  <span class="tool-mark">{{ event.status === 'ok' ? '✓' : '!' }}</span>
+                  <span class="tool-mark">
+                    {{ event.status === 'ok' ? '✓' : event.status === 'running' ? '…' : '!' }}
+                  </span>
                   {{ toolLabels[event.name] ?? event.name }}
                   <em>{{ event.summary }}</em>
                   <em v-if="event.latency_ms != null">{{ event.latency_ms }}ms</em>
@@ -337,7 +430,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div v-if="sending" class="bubble-row assistant">
+          <div v-if="sending && streamingBubbleId === null" class="bubble-row assistant">
             <span class="bubble-avatar">🐾</span>
             <div class="bubble assistant typing" aria-label="助手正在思考">
               <span></span><span></span><span></span>
@@ -414,7 +507,7 @@ onMounted(() => {
             </li>
           </ul>
           <p class="roadmap-note">
-            下一步：SSE 流式输出、RAG 知识库，以及基于 YAML 用例的 Agent 评测。
+            下一步：RAG 知识库与引用、评测集扩充与消融实验。
           </p>
         </section>
       </aside>
@@ -615,6 +708,23 @@ onMounted(() => {
   font-weight: 700;
 }
 
+.stream-status {
+  color: var(--pc-ink-soft);
+  font-size: 12px;
+  animation: pulse 1.4s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 .history-loading {
   padding: 10px 0;
   color: var(--pc-ink-soft);
@@ -646,6 +756,15 @@ onMounted(() => {
 .tool-chip.error {
   background: #fdf1ee;
   color: #a85b48;
+}
+
+.tool-chip.running {
+  background: #fdf5e4;
+  color: #9a7227;
+}
+
+.tool-chip.running em {
+  color: #b08b4d;
 }
 
 .tool-mark {

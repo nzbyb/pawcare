@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 from uuid import uuid4
 
@@ -47,6 +48,36 @@ def post_chat(client, headers, monkeypatch, llm, content, conversation_id=None):
         payload["conversation_id"] = conversation_id
     response = client.post("/api/agent/chat", headers=headers, json=payload)
     return response.json()
+
+
+def parse_sse(text: str) -> list[tuple[str, dict]]:
+    events: list[tuple[str, dict]] = []
+    for block in text.replace("\r\n", "\n").split("\n\n"):
+        if not block.strip():
+            continue
+        name = "message"
+        data_lines: list[str] = []
+        for line in block.split("\n"):
+            if line.startswith("event:"):
+                name = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line.split(":", 1)[1].lstrip())
+        if data_lines:
+            events.append((name, json.loads("\n".join(data_lines))))
+    return events
+
+
+def stream_chat(client, headers, monkeypatch, llm, content):
+    monkeypatch.setattr(agent_service, "get_llm", lambda: llm)
+    with client.stream(
+        "POST",
+        "/api/agent/chat/stream",
+        headers=headers,
+        json={"messages": [{"role": "user", "content": content}]},
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        return parse_sse("".join(response.iter_text()))
 
 
 def test_chat_tool_loop_and_history(client, owner_headers, db, monkeypatch):
@@ -298,3 +329,61 @@ def test_conversation_is_private(client, owner_headers, other_owner_headers, db,
         .count()
         == 0
     )
+
+
+def test_chat_stream_emits_steps(client, owner_headers, monkeypatch):
+    create_pet(client, owner_headers)
+    llm = FakeLLM(
+        [
+            LLMResponse(
+                content=None,
+                tool_calls=[ToolCall(id="call-1", name="list_my_pets", arguments={})],
+                token_in=12,
+                token_out=8,
+            ),
+            LLMResponse(content="你有一只宠物，叫豆豆。", token_in=20, token_out=10),
+        ]
+    )
+
+    events = stream_chat(client, owner_headers, monkeypatch, llm, "我有哪些宠物？")
+    names = [name for name, _ in events]
+    assert names[0] == "start"
+    assert "llm_start" in names
+    assert "tool_start" in names
+    assert "tool_end" in names
+    assert "assistant" in names
+    assert names[-1] == "done"
+
+    start = next(data for name, data in events if name == "start")
+    assert start["conversation_id"] > 0
+    tool_start = next(data for name, data in events if name == "tool_start")
+    assert tool_start == {"name": "list_my_pets", "arguments": {}}
+    tool_end = next(data for name, data in events if name == "tool_end")
+    assert tool_end["status"] == "ok"
+    assert "1 只宠物" in tool_end["summary"]
+
+    done = events[-1][1]
+    assert done["content"] == "你有一只宠物，叫豆豆。"
+    assert done["trace_id"] == start["trace_id"]
+    assert done["tool_events"][0]["name"] == "list_my_pets"
+    assert done["draft"] is None
+
+
+def test_chat_stream_validates_before_streaming(client, owner_headers):
+    response = client.post(
+        "/api/agent/chat/stream",
+        headers=owner_headers,
+        json={"messages": [{"role": "assistant", "content": "你好"}]},
+    )
+    assert response.json()["code"] == 400
+    assert not response.headers["content-type"].startswith("text/event-stream")
+
+
+def test_chat_stream_handles_llm_error(client, owner_headers, monkeypatch):
+    llm = FakeLLM([LLMError("模型挂了")])
+    events = stream_chat(client, owner_headers, monkeypatch, llm, "我有哪些宠物？")
+    done = events[-1][1]
+    assert events[-1][0] == "done"
+    assert "无法连接模型服务" in done["content"]
+    assert done["tool_events"] == []
+
