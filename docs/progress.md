@@ -25,8 +25,9 @@
 
 ### 提交
 
-- `a10c9cd` feat: 初始化 PawCare 后端核心链路与前端骨架
-- `7fe4ac3` fix: 宠物详情路由复用与助手进度文案
+- `2671f87` feat: 初始化 PawCare 后端核心链路与前端骨架
+- `2dacf0e` fix: 宠物详情路由复用与助手进度文案
+- `6d3fbda` docs: 记录第一天验证结果与推送阻塞
 - 远程已配置为 `https://github.com/nzbyb/pawcare.git`。
 - 推送阻塞：当前网络无法连接 `github.com:443`（无代理，TCP 探测失败），且远端仓库尚未创建。
   网络恢复并在 GitHub 创建仓库后执行：`git push -u origin main`。
@@ -62,6 +63,10 @@
 - seed 重复执行通过，数据量稳定（4 用户 / 3 宠物 / 5 笼舍 / 3 订单 / 4 提醒）。
 - `npm run typecheck`、`npm run build`：通过。
 
+### 提交
+
+- `37aed47` feat: 完成寄养主流程与草稿确认
+
 ### 下一步
 
 1. 接入 Agent 工具层（LangGraph），实现 SSE 流式输出与工具轨迹。
@@ -93,6 +98,10 @@
 - 真实 `deepseek-flash` 冒烟：`owner` 提问“我有哪些宠物？”，模型调用 `list_my_pets` 后
   返回 2 只宠物；两轮共约 3.1k tokens，工具 2ms，LLM 845ms / 1393ms。
 - 冒烟后确认：只产生 1 个会话、4 条消息、1 条工具 trace；没有新增草稿或订单。
+
+### 提交
+
+- `41fc8a6` feat: 接入权限感知 Agent 工具层与智能助手对话页
 
 ### 下一步
 
