@@ -83,9 +83,19 @@ copy .env.example .env   # 填入真实值
 uvicorn app.main:app --reload --port 8000
 ```
 
-本地第一天先用 SQLite 跑通链路（`DATABASE_URL=sqlite:///./pawcare_dev.db`）；
-Docker Compose 启动 Postgres 后，把 `DATABASE_URL` 换成 `postgresql+psycopg://...` 即可。
-生产路径仍以 PostgreSQL + pgvector 为准。
+本地开发默认用 SQLite 跑通链路（`DATABASE_URL=sqlite:///./pawcare_dev.db`），
+启动时自动 `create_all`；切换到 PostgreSQL 后，表结构由 Alembic 管理：
+
+```bash
+cd backend
+# 新库：建表 + 扩展 + 索引 + 排他约束
+.venv\Scripts\python.exe -m alembic upgrade head
+# 已有旧库（曾由 create_all 建表）：只登记版本，不重复建表
+.venv\Scripts\python.exe -m alembic stamp head
+```
+
+迁移文件在 [backend/migrations/](backend/migrations/)。PostgreSQL 路径会创建
+`vector` / `btree_gist` 扩展、知识库 HNSW 索引，以及订单日期区间的排他约束。
 
 生成可重复执行的演示数据：
 
@@ -119,6 +129,9 @@ npm run dev
 copy .env.example .env
 docker compose up -d --build
 ```
+
+后端容器启动时先执行 `alembic upgrade head`，再启动 uvicorn；`.env` 不进入镜像。
+知识库模型缓存在 `backend/.fastembed_cache`，首次检索会下载 BGE 模型。
 
 ### 5.4 Agent 评测
 
@@ -168,9 +181,10 @@ JSON / CSV 报告写入 `backend/evaluation/reports/`（不入库）。
 - [x] SSE 流式输出：步骤事件 + 前端增量渲染
 - [x] RAG：14 篇护理知识、混合检索、来源标注、拒答与注入防护
 - [x] 评测 harness：34 条 YAML 用例、隔离评测库、JSON / CSV 报告
+- [x] Alembic 初始迁移、pgvector 余弦检索与订单排他约束
+- [ ] Docker Compose 启动验证（本机 Docker daemon 未运行）
 - [ ] 通知中心
 - [ ] 评测用例扩充到 80–100 条，补 baseline 与消融
-- [ ] Alembic 迁移、Docker 演示
 
 ## 8. 说明
 

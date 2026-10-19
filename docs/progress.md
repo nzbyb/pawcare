@@ -239,3 +239,50 @@
 2. 补 baseline / 消融（去 RAG、去权限、去引用约束）。
 3. Alembic 初始迁移、PostgreSQL pgvector 检索与排他约束、Docker 演示。
 4. 通知中心（可选）。
+
+## 2026-10-19 · 第 7 天
+
+### 完成
+
+- Alembic：
+  - `alembic.ini` + `migrations/env.py`：数据库地址统一从 `settings.DATABASE_URL` 读取；
+    自定义类型通过 `render_item` 输出为 `EmbeddingType()`。
+  - 初始迁移覆盖 17 张业务表、索引、唯一约束与外键。
+  - PostgreSQL 专有部分：`vector` / `btree_gist` 扩展、`vector(512)` 列、
+    知识库 HNSW 余弦索引、活跃订单日期区间排他约束
+    `EXCLUDE USING gist (kennel_id WITH =, daterange(start, end, '[)') WITH &&)`。
+  - `alembic.ini` 必须保持 ASCII：Windows 上 Alembic 按系统 locale（GBK）读取，
+    中文注释会直接抛 `UnicodeDecodeError`。
+- 启动与部署：
+  - SQLite 开发库继续用 `create_all`；PostgreSQL 不再隐式建表，改由 Alembic 管理。
+  - 后端镜像增加 `migrations/`、`alembic.ini` 和 `scripts/docker-entrypoint.sh`，
+    容器启动先 `alembic upgrade head` 再拉起 uvicorn。
+  - 新增 `backend/.dockerignore`，排除 `.venv`、`.env`、开发库和模型缓存。
+  - Compose 挂载 `backend/.fastembed_cache`，重建镜像不必重新下载 BGE 模型。
+- 检索生产路径：
+  - PostgreSQL 上用 `ORDER BY embedding <=> CAST(:q AS vector(512))` 取候选，
+    再在 Python 中叠加词法分，SQLite / PostgreSQL 评分口径一致。
+  - 分类过滤下推到 JSONB `meta->>'category'`，候选数默认 `top_k × 4`（12–50）。
+  - 嵌入缺失时先补齐再排序；向量服务失败仍退回纯词法检索。
+- 测试新增：迁移 upgrade / 重复 upgrade / downgrade，以及 pgvector 查询编译断言。
+
+### 验证
+
+- `pytest`：60 passed。
+- 迁移在全新 SQLite 库上 `upgrade head` → 重复执行 → `downgrade base` 全部通过；
+  `alembic check` 报告 `No new upgrade operations detected`。
+- 以 PostgreSQL 方言离线生成 DDL（`alembic upgrade head --sql`），确认：
+  `VECTOR(512)`、`JSONB`、`CREATE EXTENSION`、HNSW 索引和排他约束均正确输出。
+- 本机 Docker daemon 未运行（Docker Desktop 未安装 / 未启动），
+  因此 Compose 只完成配置与离线 DDL 校验，未做容器级启动验证。
+
+### 提交
+
+- 待填写
+
+### 下一步
+
+1. 评测集扩充到 80–100 条，增加多工具串联、信息不足、多轮澄清和更隐蔽的注入用例。
+2. 补 baseline / 消融（去 RAG、去权限、去引用约束）。
+3. 网络与 Docker 可用时执行 `docker compose up -d --build`，验证迁移、pgvector 检索和前端链路。
+4. 通知中心（可选）。

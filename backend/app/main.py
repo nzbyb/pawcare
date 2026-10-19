@@ -25,14 +25,17 @@ from app import models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 本地开发用 create_all 快速起飞；正式环境用 Alembic。
     if engine.dialect.name == "postgresql":
+        # 生产库表结构由 Alembic 管理（Docker entrypoint 会先执行 upgrade head）。
+        # 这里只确保扩展存在，兼容手工迁移后的首次启动。
         from sqlalchemy import text
 
         with engine.begin() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist"))
-    Base.metadata.create_all(bind=engine)
+    else:
+        # 本地 SQLite 用 create_all 快速起飞；生产环境不再隐式建表。
+        Base.metadata.create_all(bind=engine)
     yield
 
 

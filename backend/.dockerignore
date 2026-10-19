@@ -1,0 +1,11 @@
+# 构建上下文排除项。.env 绝不进入镜像。
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.fastembed_cache/
+*.db
+uploads/
+evaluation/reports/
+tests/

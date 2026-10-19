@@ -14,9 +14,12 @@ COPY requirements.txt requirements-agent.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY alembic.ini ./
+COPY migrations ./migrations
+COPY scripts ./scripts
 COPY .slowapi.env ./
-RUN mkdir -p uploads
+RUN mkdir -p uploads && chmod +x scripts/docker-entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "scripts/docker-entrypoint.sh"]

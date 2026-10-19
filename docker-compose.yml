@@ -41,6 +41,8 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/uploads:/app/uploads
+      # 首次检索会下载 BGE 模型；挂载后重建镜像不必重新下载。
+      - ./backend/.fastembed_cache:/app/.fastembed_cache
     depends_on:
       postgres:
         condition: service_healthy

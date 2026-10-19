@@ -120,8 +120,25 @@ POST /api/boarding/drafts/{id}/confirm
 - 引用：工具返回 `title / content / source / score / trust`，系统提示要求用“（来源：标题）”标注。
 - 拒答：没有检索结果时明确说没有查到，不凭常识编造，不推荐具体商品或购买链接。
 - 注入：知识片段与宠物备注一样按不可信数据处理；即使片段包含“忽略之前的指令”，也只提醒用户。
-- 生产路径：同一检索接口可把候选查询替换为 PostgreSQL + pgvector 的 `ORDER BY embedding <=> query`，
-  向量列由 `EmbeddingType` 自动映射为 `vector(512)`。
+- 生产路径：PostgreSQL 上先用 `ORDER BY embedding <=> CAST(:q AS vector(512))`
+  取候选（HNSW 余弦索引），再在 Python 里叠加词法分，保证两种数据库的评分口径一致；
+  分类过滤走 JSONB `meta->>'category'`。
+- 迁移：[migrations/versions/39bc51a83f0d_initial_schema.py](../backend/migrations/versions/39bc51a83f0d_initial_schema.py)
+  在 PostgreSQL 上创建 `vector` / `btree_gist` 扩展、`vector(512)` 列、HNSW 索引，
+  并为活跃寄养订单添加日期区间排他约束。
+- 启动：SQLite 开发库仍由 `create_all` 建表；PostgreSQL 由 Alembic 管理，
+  容器 entrypoint 先执行 `alembic upgrade head` 再启动服务。
+
+### 5.3 数据库约束
+
+| 约束 | 作用 |
+|---|---|
+| `uq_knowledge_doc_chunk` | 同一文档的切片序号唯一，seed 可重复执行 |
+| `uq_daily_report_order_date` | 每笔订单每天只有一份日报 |
+| `ex_boarding_orders_active_period` | PostgreSQL 排他约束：同一笼舍的 `[start, end)` 活跃订单不得重叠 |
+| `ix_boarding_orders_draft_id`（唯一） | 一张草稿最多确认出一笔订单，支撑确认接口幂等 |
+
+排他约束与应用层档期校验形成双层保护：应用层负责友好报错，数据库层兜住并发确认。
 
 ## 6. 评测（论文阶段）
 
