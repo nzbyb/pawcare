@@ -31,7 +31,8 @@ const capabilities = [
 ]
 
 const roadmap = [
-  { label: '工具层与权限校验', done: true },
+  { label: '权限感知的服务层', done: true },
+  { label: 'Agent 工具层', done: false },
   { label: 'LangGraph Agent 循环', done: false },
   { label: 'SSE 流式输出与工具轨迹', done: false },
   { label: 'RAG 知识库与引用', done: false },

@@ -98,7 +98,9 @@ function onUserSelect(key: string | number): void {
         <n-button quaternary size="small" @click="onUserSelect('logout')">退出</n-button>
       </header>
 
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <component :is="Component" :key="route.fullPath" />
+      </router-view>
     </main>
   </div>
 </template>
