@@ -107,3 +107,20 @@ def other_owner_headers(client):
     username = unique_username("other")
     token = register_and_login(client, username)
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def admin_headers(client, db):
+    username = unique_username("admin")
+    db.add(
+        User(
+            username=username,
+            password_hash=hash_password("Passw0rd!"),
+            nickname="管理员",
+            role="admin",
+            status=1,
+        )
+    )
+    db.commit()
+    token = login(client, username)
+    return {"Authorization": f"Bearer {token}"}

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -76,11 +77,20 @@ class BoardingOrder(Base):
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime)
     checked_out_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    # 一张草稿最多生成一笔订单，用于确认接口的幂等返回
+    draft_id: Mapped[int | None] = mapped_column(
+        ForeignKey("boarding_drafts.id", ondelete="SET NULL"),
+        unique=True,
+        index=True,
+    )
 
 
 class BoardingDailyReport(Base):
     __tablename__ = "boarding_daily_reports"
-    __table_args__ = {"comment": "寄养日报"}
+    __table_args__ = (
+        UniqueConstraint("order_id", "report_date", name="uq_daily_report_order_date"),
+        {"comment": "寄养日报"},
+    )
 
     order_id: Mapped[int] = mapped_column(
         ForeignKey("boarding_orders.id", ondelete="CASCADE"),

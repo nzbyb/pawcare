@@ -12,6 +12,7 @@ const router = useRouter()
 const navItems = [
   { key: 'dashboard', label: '工作台', short: '工作台', icon: '🏠', to: '/', match: ['dashboard'] },
   { key: 'pets', label: '宠物档案', short: '宠物', icon: '🐾', to: '/pets', match: ['pets', 'pet-detail'] },
+  { key: 'boarding', label: '寄养预约', short: '寄养', icon: '🏡', to: '/boarding', match: ['boarding'] },
   { key: 'agent', label: '智能助手', short: '助手', icon: '💬', to: '/agent', match: ['agent'] },
 ]
 

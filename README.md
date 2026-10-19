@@ -86,6 +86,22 @@ uvicorn app.main:app --reload --port 8000
 Docker Compose 启动 Postgres 后，把 `DATABASE_URL` 换成 `postgresql+psycopg://...` 即可。
 生产路径仍以 PostgreSQL + pgvector 为准。
 
+生成可重复执行的演示数据：
+
+```bash
+cd backend
+.venv\Scripts\python.exe scripts\seed.py
+```
+
+演示账号（全部为合成数据）：
+
+| 角色 | 账号 | 密码 |
+|---|---|---|
+| 宠物主 | `owner` | `Owner12345` |
+| 宠物主 | `owner2` | `Owner12345` |
+| 寄养员 | `staff` | `Staff12345` |
+| 管理员 | `admin` | `Admin12345` |
+
 ### 5.2 前端
 
 ```bash
@@ -124,7 +140,9 @@ docker compose up -d --build
 - [x] 宠物档案、体重、健康记录、提醒同步接口
 - [x] 后端 pytest 用例（认证 / 权限 / 档案 / 提醒）
 - [x] 前端骨架：登录、工作台、宠物列表、详情、Agent 占位页
-- [ ] 寄养主流程（笼舍、订单、日报）
+- [x] 寄养主流程：笼舍、空档查询、草稿确认、订单状态流转、日报
+- [x] 演示数据 seed 脚本（账号 / 宠物 / 健康记录 / 笼舍 / 订单）
+- [x] 寄养前端页面：空档查询、草稿倒计时确认、订单流转、日报
 - [ ] 通知中心
 - [ ] Agent 工具层 + SSE
 - [ ] RAG + 引用

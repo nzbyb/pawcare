@@ -32,6 +32,8 @@ const capabilities = [
 
 const roadmap = [
   { label: '权限感知的服务层', done: true },
+  { label: '寄养草稿与确认接口', done: true },
+  { label: '寄养前端页面', done: true },
   { label: 'Agent 工具层', done: false },
   { label: 'LangGraph Agent 循环', done: false },
   { label: 'SSE 流式输出与工具轨迹', done: false },

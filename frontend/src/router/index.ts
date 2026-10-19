@@ -42,6 +42,12 @@ const router = createRouter({
           meta: { title: '宠物详情' },
         },
         {
+          path: 'boarding',
+          name: 'boarding',
+          component: () => import('@/views/BoardingView.vue'),
+          meta: { title: '寄养预约' },
+        },
+        {
           path: 'agent',
           name: 'agent',
           component: () => import('@/views/AgentView.vue'),

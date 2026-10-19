@@ -86,3 +86,82 @@ export interface Reminder {
   source_health_record_id?: number | null
   notified_at?: string | null
 }
+
+export type KennelSize = 'small' | 'medium' | 'large'
+
+export interface Kennel {
+  id: number
+  code: string
+  size: string
+  status: string
+  daily_price: number
+  note?: string | null
+}
+
+export type BoardingOrderStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'checked_in'
+  | 'boarding'
+  | 'completed'
+  | 'cancelled'
+
+export interface BoardingOrder {
+  id: number
+  pet_id: number
+  owner_id: number
+  kennel_id: number
+  start_date: string
+  end_date: string
+  status: BoardingOrderStatus
+  daily_price: number
+  deposit: number
+  total_amount: number
+  note?: string | null
+  confirmed_at?: string | null
+  checked_in_at?: string | null
+  checked_out_at?: string | null
+  draft_id?: number | null
+  pet_name?: string | null
+  kennel_code?: string | null
+  nights?: number | null
+}
+
+export interface BoardingDraft {
+  id: number
+  owner_id: number
+  pet_id: number
+  kennel_id: number
+  start_date: string
+  end_date: string
+  daily_price: number
+  total_amount: number
+  status: string
+  expires_at: string
+  idempotency_key: string
+  note?: string | null
+  pet_name?: string | null
+  kennel_code?: string | null
+  nights?: number | null
+}
+
+export interface BoardingDraftPayload {
+  pet_id: number
+  kennel_id: number
+  start_date: string
+  end_date: string
+  note?: string | null
+  idempotency_key?: string
+}
+
+export interface DailyReport {
+  id: number
+  order_id: number
+  report_date: string
+  appetite?: string | null
+  stool?: string | null
+  spirit?: string | null
+  note?: string | null
+  photos?: string[] | null
+  created_by?: number | null
+}
