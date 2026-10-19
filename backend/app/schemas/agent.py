@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChatMessage(BaseModel):
@@ -13,5 +14,39 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
 
 
-class DraftConfirmRequest(BaseModel):
-    idempotency_key: str = Field(min_length=8, max_length=80)
+class ToolEvent(BaseModel):
+    name: str
+    status: str
+    summary: str
+    latency_ms: int | None = None
+
+
+class ChatResponse(BaseModel):
+    conversation_id: int
+    trace_id: str
+    content: str
+    draft: dict | None = None
+    tool_events: list[ToolEvent] = Field(default_factory=list)
+
+
+class ConversationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    last_message_at: datetime
+    create_time: datetime | None = None
+
+
+class AgentMessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    role: str
+    content: str
+    tool_calls: list | dict | None = None
+    tool_call_id: str | None = None
+    token_in: int | None = None
+    token_out: int | None = None
+    latency_ms: int | None = None
+    create_time: datetime | None = None

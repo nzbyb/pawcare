@@ -67,3 +67,37 @@
 1. 接入 Agent 工具层（LangGraph），实现 SSE 流式输出与工具轨迹。
 2. 补 Alembic 初始迁移与 PostgreSQL 排他约束。
 3. 准备知识库切片与 RAG 引用。
+
+## 2026-10-19 · 第 3 天
+
+### 完成
+
+- Agent 工具层：7 个权限感知工具（宠物、健康记录、提醒、笼舍空档、草稿、订单、日报）。
+- 工具注册表刻意不包含 `confirm_draft`；确认只能走独立 REST 接口，模型无法自行下单。
+- 工具身份只来自 JWT 对应的 `User`，参数中没有 `user_id`；越权查询在服务层被拦截。
+- 显式 Agent 循环：最多 6 轮工具调用，单轮 LLM 超时 30 秒，异常时返回友好兜底文案。
+- 每轮持久化 assistant / tool 消息、工具参数与结果摘要、状态、耗时、token 和 trace_id。
+- 会话历史按数据库为准，客户端重发历史不会重复落库；对话按用户隔离。
+- 新增 `POST /api/agent/chat`、`GET /api/agent/conversations`、`GET /api/agent/conversations/{id}`。
+- 新增 14 个 Agent 测试：工具注册表、越权隔离、草稿只写不确认、假模型多轮循环、
+  历史恢复、最大轮数、模型异常、会话私有性。
+- 前端智能助手页替换占位：真实多轮对话、工具轨迹、草稿卡片、历史会话切换、Enter 发送。
+- 清理并重建开发库（`AgentMessage` 新增 token / 耗时列，`create_all` 不会自动改表），
+  重新执行 seed；开发库仅含合成数据。
+
+### 验证
+
+- `pytest`：37 passed。
+- `npm run typecheck`：通过。
+- `npm run build`：通过（AgentView chunk 9.36 kB）。
+- 真实 `deepseek-flash` 冒烟：`owner` 提问“我有哪些宠物？”，模型调用 `list_my_pets` 后
+  返回 2 只宠物；两轮共约 3.1k tokens，工具 2ms，LLM 845ms / 1393ms。
+- 冒烟后确认：只产生 1 个会话、4 条消息、1 条工具 trace；没有新增草稿或订单。
+
+### 下一步
+
+1. SSE 流式输出（步骤级或 token 级）与前端增量渲染。
+2. RAG 知识库切片、引用与拒答。
+3. 80–100 条 YAML 评测用例与 baseline / 消融。
+4. Alembic 初始迁移、PostgreSQL 排他约束、Docker 演示。
+5. 网络恢复且远端仓库创建后推送 GitHub。

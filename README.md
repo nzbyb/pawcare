@@ -12,7 +12,7 @@
 | 数据库 | PostgreSQL 16 + pgvector |
 | 缓存/限流 | Redis 7（可选，未启动时退回进程内存） |
 | 鉴权 | JWT + bcrypt，三角色：宠物主 / 寄养员 / 管理员 |
-| Agent | LangGraph + langchain-openai，DeepSeek OpenAI 兼容接口 |
+| Agent | 显式工具调用循环（httpx + OpenAI 兼容接口），后续可替换为 LangGraph |
 | RAG | pgvector + bge-small-zh-v1.5，回答带引用 |
 | 定时 | APScheduler（单进程） |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
@@ -49,6 +49,7 @@ backend/
     models/       # SQLAlchemy 模型
     schemas/      # Pydantic 模型
     services/     # 业务逻辑（权限、事务、Agent 工具的服务层）
+    agent/        # 系统提示词、工具定义、LLM 客户端与 Agent 循环
     dependencies/ # 鉴权依赖
     common/       # 统一响应与异常
     utils/        # JWT、密码
@@ -143,8 +144,12 @@ docker compose up -d --build
 - [x] 寄养主流程：笼舍、空档查询、草稿确认、订单状态流转、日报
 - [x] 演示数据 seed 脚本（账号 / 宠物 / 健康记录 / 笼舍 / 订单）
 - [x] 寄养前端页面：空档查询、草稿倒计时确认、订单流转、日报
+- [x] Agent 工具层：7 个权限感知工具，工具注册表中没有确认工具
+- [x] 多轮工具调用循环、会话历史持久化、token / 耗时 / 错误码 trace
+- [x] `POST /api/agent/chat` 与历史会话接口，deepseek-flash 真实冒烟通过
+- [x] 前端智能助手页：多轮对话、工具轨迹、草稿卡片、历史会话切换
 - [ ] 通知中心
-- [ ] Agent 工具层 + SSE
+- [ ] SSE 流式输出
 - [ ] RAG + 引用
 - [ ] 评测 harness
 - [ ] Alembic 迁移、Docker 演示

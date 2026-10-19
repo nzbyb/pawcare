@@ -1,17 +1,37 @@
 <script setup lang="ts">
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { NButton, NInput, NTag } from 'naive-ui'
+
+import { chat, getConversation, listConversations } from '@/api/agent'
+import type {
+  AgentConversation,
+  AgentToolEvent,
+  BoardingDraft,
+} from '@/types'
+
+interface ChatBubble {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  toolEvents?: AgentToolEvent[]
+  draft?: BoardingDraft | null
+  traceId?: string
+}
+
+const router = useRouter()
 
 const examples = [
   '豆豆下一次疫苗什么时候到期？',
-  '帮我看看国庆期间有没有适合大型犬的笼舍。',
-  '给豆豆预约 10 月 1 日到 10 月 5 日的寄养。',
+  '帮我看看下个月有没有适合中型犬的笼舍。',
+  '给豆豆预约 11 月 1 日到 11 月 5 日的寄养。',
 ]
 
 const capabilities = [
   {
     icon: '🔎',
     title: '查档案',
-    text: '按宠物名和时间范围查询疫苗、驱虫、就诊与体重记录。',
+    text: '按宠物名和时间范围查询疫苗、驱虫、就诊记录。',
   },
   {
     icon: '📅',
@@ -26,20 +46,171 @@ const capabilities = [
   {
     icon: '✅',
     title: '人工确认',
-    text: '草稿不会直接下单，需要你在界面上单独确认。',
+    text: '草稿不会直接下单，需要你在寄养页单独确认。',
   },
 ]
 
 const roadmap = [
   { label: '权限感知的服务层', done: true },
   { label: '寄养草稿与确认接口', done: true },
-  { label: '寄养前端页面', done: true },
-  { label: 'Agent 工具层', done: false },
-  { label: 'LangGraph Agent 循环', done: false },
-  { label: 'SSE 流式输出与工具轨迹', done: false },
+  { label: 'Agent 工具层与多轮调用', done: true },
+  { label: '会话持久化与 trace', done: true },
+  { label: 'SSE 流式输出', done: false },
   { label: 'RAG 知识库与引用', done: false },
   { label: '评测集与消融实验', done: false },
 ]
+
+const toolLabels: Record<string, string> = {
+  list_my_pets: '查询宠物',
+  get_pet_health_records: '查询健康记录',
+  get_upcoming_reminders: '查询到期提醒',
+  check_kennel_availability: '检查寄养空档',
+  create_boarding_draft: '生成预约草稿',
+  list_boarding_orders: '查询寄养订单',
+  get_boarding_daily_reports: '查询每日报告',
+}
+
+const messages = ref<ChatBubble[]>([])
+const conversations = ref<AgentConversation[]>([])
+const conversationId = ref<number | null>(null)
+const input = ref('')
+const sending = ref(false)
+const loadingHistory = ref(false)
+const bodyRef = ref<HTMLElement | null>(null)
+let nextId = 1
+
+const canSend = computed(() => input.value.trim().length > 0 && !sending.value)
+const showWelcome = computed(() => messages.value.length === 0 && !loadingHistory.value)
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function renderMessage(content: string): string {
+  return escapeHtml(content)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^- /gm, '• ')
+    .replace(/\n/g, '<br>')
+}
+
+function formatTime(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function addMessage(
+  role: 'user' | 'assistant',
+  content: string,
+  extra: Partial<ChatBubble> = {},
+): ChatBubble {
+  const bubble: ChatBubble = { id: nextId++, role, content, ...extra }
+  messages.value.push(bubble)
+  return bubble
+}
+
+async function scrollToBottom(): Promise<void> {
+  await nextTick()
+  const element = bodyRef.value
+  if (element) element.scrollTop = element.scrollHeight
+}
+
+async function loadConversations(): Promise<void> {
+  try {
+    conversations.value = await listConversations()
+  } catch {
+    // 错误提示由 http 拦截器统一展示。
+  }
+}
+
+async function openConversation(item: AgentConversation): Promise<void> {
+  if (sending.value || loadingHistory.value) return
+  loadingHistory.value = true
+  input.value = ''
+  try {
+    const data = await getConversation(item.id)
+    conversationId.value = item.id
+    messages.value = data.messages
+      .filter(
+        (message) =>
+          (message.role === 'user' || message.role === 'assistant') &&
+          message.content.trim().length > 0,
+      )
+      .map((message) => ({
+        id: nextId++,
+        role: message.role as 'user' | 'assistant',
+        content: message.content,
+      }))
+    await scrollToBottom()
+  } catch {
+    // 拦截器已提示。
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+function startNewConversation(): void {
+  if (sending.value) return
+  conversationId.value = null
+  messages.value = []
+  input.value = ''
+}
+
+async function send(text?: string): Promise<void> {
+  const content = (text ?? input.value).trim()
+  if (!content || sending.value) return
+
+  input.value = ''
+  addMessage('user', content)
+  sending.value = true
+  await scrollToBottom()
+
+  try {
+    const result = await chat({
+      ...(conversationId.value ? { conversation_id: conversationId.value } : {}),
+      messages: [{ role: 'user', content }],
+    })
+    conversationId.value = result.conversation_id
+    addMessage('assistant', result.content, {
+      toolEvents: result.tool_events,
+      draft: result.draft,
+      traceId: result.trace_id,
+    })
+    await loadConversations()
+  } catch {
+    addMessage(
+      'assistant',
+      '抱歉，这次请求没有完成。请稍后再试，或者把问题说得更具体一点。',
+    )
+  } finally {
+    sending.value = false
+    await scrollToBottom()
+  }
+}
+
+function onInputKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  void send()
+}
+
+function goConfirm(): void {
+  router.push('/boarding')
+}
+
+onMounted(() => {
+  void loadConversations()
+})
 </script>
 
 <template>
@@ -48,12 +219,15 @@ const roadmap = [
       <div>
         <div class="title-row">
           <h1 class="page-title">智能助手</h1>
-          <n-tag round type="warning" size="small">接口开发中</n-tag>
+          <n-tag round type="success" size="small">deepseek-flash · 已接入</n-tag>
         </div>
         <p class="page-subtitle">
           用自然语言查询档案、检查寄养空档，并把预约整理成可确认的草稿。
         </p>
       </div>
+      <n-button quaternary size="small" :disabled="sending" @click="startNewConversation">
+        + 新对话
+      </n-button>
     </div>
 
     <div class="agent-grid">
@@ -66,45 +240,158 @@ const roadmap = [
               <small>权限感知 · 草稿确认 · 可追溯</small>
             </div>
           </div>
-          <span class="status-dot">开发中</span>
+          <span class="status-dot" :class="{ busy: sending }">
+            {{ sending ? '思考中' : '在线' }}
+          </span>
         </header>
 
-        <div class="chat-body">
-          <div class="assistant-bubble">
-            <p>
-              你好，我是 PawCare 助手。等接口接入后，你可以直接问我宠物的健康记录、
-              疫苗到期时间，或者让我帮你查寄养空档。
-            </p>
-            <p class="bubble-note">
-              涉及下单的操作只会生成草稿，必须由你确认后才会生效。
-            </p>
+        <div ref="bodyRef" class="chat-body">
+          <template v-if="showWelcome">
+            <div class="assistant-bubble">
+              <p>
+                你好，我是 PawCare 助手。可以帮你查宠物档案、健康记录和疫苗提醒，
+                也能查询寄养空档并生成预约草稿。
+              </p>
+              <p class="bubble-note">
+                涉及预约的操作只会生成草稿，必须由你在寄养页确认后才会生效。
+              </p>
+            </div>
+
+            <div class="examples">
+              <span class="muted examples-label">你可以这样问</span>
+              <button
+                v-for="example in examples"
+                :key="example"
+                class="example-chip"
+                :disabled="sending"
+                @click="send(example)"
+              >
+                {{ example }}
+              </button>
+            </div>
+          </template>
+
+          <div v-if="loadingHistory" class="history-loading">正在读取历史对话…</div>
+
+          <div
+            v-for="bubble in messages"
+            :key="bubble.id"
+            class="bubble-row"
+            :class="bubble.role"
+          >
+            <span v-if="bubble.role === 'assistant'" class="bubble-avatar">🐾</span>
+            <div class="bubble" :class="bubble.role">
+              <div class="bubble-text" v-html="renderMessage(bubble.content)"></div>
+
+              <div v-if="bubble.toolEvents?.length" class="tool-events">
+                <span
+                  v-for="(event, index) in bubble.toolEvents"
+                  :key="`${bubble.id}-${index}`"
+                  class="tool-chip"
+                  :class="{ error: event.status === 'error' }"
+                >
+                  <span class="tool-mark">{{ event.status === 'ok' ? '✓' : '!' }}</span>
+                  {{ toolLabels[event.name] ?? event.name }}
+                  <em>{{ event.summary }}</em>
+                  <em v-if="event.latency_ms != null">{{ event.latency_ms }}ms</em>
+                </span>
+              </div>
+
+              <div v-if="bubble.draft" class="draft-card">
+                <div class="draft-head">
+                  <span class="draft-badge">待确认草稿</span>
+                  <strong>
+                    {{ bubble.draft.pet_name ?? '宠物' }} ·
+                    {{ bubble.draft.kennel_code ?? '笼舍' }}
+                  </strong>
+                </div>
+                <div class="draft-grid">
+                  <div>
+                    <span>入住</span>
+                    <strong>{{ bubble.draft.start_date }}</strong>
+                  </div>
+                  <div>
+                    <span>退房</span>
+                    <strong>{{ bubble.draft.end_date }}</strong>
+                  </div>
+                  <div>
+                    <span>晚数</span>
+                    <strong>{{ bubble.draft.nights ?? '—' }} 晚</strong>
+                  </div>
+                  <div>
+                    <span>预估</span>
+                    <strong>¥{{ bubble.draft.total_amount }}</strong>
+                  </div>
+                </div>
+                <div class="draft-foot">
+                  <span>15 分钟内有效，确认后才会生成订单</span>
+                  <n-button size="small" type="primary" @click="goConfirm">
+                    去寄养页确认
+                  </n-button>
+                </div>
+              </div>
+
+              <div v-if="bubble.traceId" class="trace">
+                追踪 ID · {{ bubble.traceId.slice(0, 8) }}
+              </div>
+            </div>
           </div>
 
-          <div class="examples">
-            <span class="muted examples-label">你可以这样问</span>
-            <button
-              v-for="example in examples"
-              :key="example"
-              class="example-chip"
-              disabled
-            >
-              {{ example }}
-            </button>
+          <div v-if="sending" class="bubble-row assistant">
+            <span class="bubble-avatar">🐾</span>
+            <div class="bubble assistant typing" aria-label="助手正在思考">
+              <span></span><span></span><span></span>
+            </div>
           </div>
         </div>
 
         <footer class="chat-input">
           <n-input
-            placeholder="助手接口接入后即可对话"
-            disabled
-            round
+            v-model:value="input"
+            type="textarea"
+            placeholder="问点什么，Enter 发送，Shift + Enter 换行"
+            :autosize="{ minRows: 1, maxRows: 4 }"
+            :disabled="sending"
             size="large"
+            @keydown="onInputKeydown"
           />
-          <n-button type="primary" size="large" disabled round>发送</n-button>
+          <n-button
+            type="primary"
+            size="large"
+            round
+            :disabled="!canSend"
+            :loading="sending"
+            @click="send()"
+          >
+            发送
+          </n-button>
         </footer>
       </section>
 
       <aside class="side">
+        <section class="side-card soft-card">
+          <div class="side-head">
+            <h2 class="section-title">对话记录</h2>
+            <span class="muted side-count">{{ conversations.length }}</span>
+          </div>
+          <div v-if="conversations.length === 0" class="empty-history">
+            还没有对话。从右边的问题开始试试。
+          </div>
+          <div v-else class="conversation-list">
+            <button
+              v-for="item in conversations"
+              :key="item.id"
+              class="conversation-item"
+              :class="{ active: item.id === conversationId }"
+              :disabled="sending || loadingHistory"
+              @click="openConversation(item)"
+            >
+              <strong>{{ item.title }}</strong>
+              <small>{{ formatTime(item.last_message_at) }}</small>
+            </button>
+          </div>
+        </section>
+
         <section class="side-card soft-card">
           <h2 class="section-title">能做什么</h2>
           <div class="capability-list">
@@ -127,7 +414,7 @@ const roadmap = [
             </li>
           </ul>
           <p class="roadmap-note">
-            当前阶段先把档案与健康管理的核心链路做稳，再接 Agent。
+            下一步：SSE 流式输出、RAG 知识库，以及基于 YAML 用例的 Agent 评测。
           </p>
         </section>
       </aside>
@@ -142,6 +429,13 @@ const roadmap = [
   gap: 10px;
 }
 
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .agent-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.75fr);
@@ -151,7 +445,8 @@ const roadmap = [
 
 .chat-shell {
   display: flex;
-  min-height: 600px;
+  height: calc(100vh - 190px);
+  min-height: 620px;
   flex-direction: column;
   overflow: hidden;
 }
@@ -196,18 +491,25 @@ const roadmap = [
 .status-dot {
   padding: 5px 11px;
   border-radius: 999px;
-  background: #fdf5e4;
-  color: #9a7227;
+  background: #edf7ec;
+  color: #4b7a45;
   font-size: 11px;
   font-weight: 700;
+}
+
+.status-dot.busy {
+  background: #fdf5e4;
+  color: #9a7227;
 }
 
 .chat-body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 22px;
+  gap: 20px;
+  overflow-y: auto;
   padding: 22px 20px;
+  scroll-behavior: smooth;
 }
 
 .assistant-bubble {
@@ -251,16 +553,238 @@ const roadmap = [
   color: #8a7c71;
   font-size: 13px;
   text-align: left;
+  cursor: pointer;
+  transition: 0.16s ease;
+}
+
+.example-chip:hover:not(:disabled) {
+  border-color: #e8b79f;
+  color: #b85f3c;
+  transform: translateY(-1px);
+}
+
+.example-chip:disabled {
   cursor: not-allowed;
-  opacity: 0.85;
+  opacity: 0.6;
+}
+
+.bubble-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.bubble-row.user {
+  justify-content: flex-end;
+}
+
+.bubble-avatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  margin-top: 2px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--pc-sage-soft);
+  font-size: 14px;
+}
+
+.bubble {
+  max-width: 78%;
+  padding: 12px 15px;
+  border-radius: 4px 16px 16px;
+  background: #fff;
+  border: 1px solid #f0e6dc;
+  font-size: 14px;
+  line-height: 1.72;
+}
+
+.bubble.user {
+  border-radius: 16px 4px 16px 16px;
+  border-color: transparent;
+  background: var(--pc-primary);
+  color: #fff;
+}
+
+.bubble-text {
+  overflow-wrap: anywhere;
+}
+
+.bubble-text :deep(strong) {
+  font-weight: 700;
+}
+
+.history-loading {
+  padding: 10px 0;
+  color: var(--pc-ink-soft);
+  font-size: 12px;
+  text-align: center;
+}
+
+.tool-events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px dashed #f0e4d8;
+}
+
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #f4f8f2;
+  color: #58714f;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tool-chip.error {
+  background: #fdf1ee;
+  color: #a85b48;
+}
+
+.tool-mark {
+  font-size: 10px;
+}
+
+.tool-chip em {
+  color: #8a9b84;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.tool-chip.error em {
+  color: #b98a7d;
+}
+
+.draft-card {
+  margin-top: 12px;
+  padding: 13px 14px;
+  border: 1px solid #efd9ca;
+  border-radius: 13px;
+  background: linear-gradient(150deg, #fffaf6, #fdf3ec);
+}
+
+.draft-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.draft-head strong {
+  font-size: 13px;
+}
+
+.draft-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f8e3d7;
+  color: #b05f3f;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.draft-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.draft-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.draft-grid span {
+  color: var(--pc-ink-soft);
+  font-size: 10px;
+}
+
+.draft-grid strong {
+  font-size: 12px;
+}
+
+.draft-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #eccfbd;
+}
+
+.draft-foot span {
+  color: #9a7c6b;
+  font-size: 10px;
+}
+
+.trace {
+  margin-top: 8px;
+  color: #b3a79d;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.bubble.user .trace {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 15px 17px;
+}
+
+.typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #d6b8a6;
+  animation: typing 1.2s infinite ease-in-out;
+}
+
+.typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 .chat-input {
   display: flex;
+  align-items: flex-end;
   gap: 10px;
   padding: 16px 20px;
   border-top: 1px solid var(--pc-line);
   background: rgba(255, 255, 255, 0.6);
+}
+
+.chat-input :deep(textarea) {
+  resize: none;
 }
 
 .side {
@@ -271,6 +795,81 @@ const roadmap = [
 
 .side-card {
   padding: 20px;
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.side-count {
+  font-size: 11px;
+}
+
+.empty-history {
+  margin-top: 14px;
+  padding: 16px 12px;
+  border: 1px dashed #e8ddd2;
+  border-radius: 12px;
+  color: #9a8f85;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.conversation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+  max-height: 222px;
+  overflow-y: auto;
+}
+
+.conversation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--pc-ink-soft);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.16s ease;
+}
+
+.conversation-item:hover:not(:disabled) {
+  background: #f7f1ea;
+  color: var(--pc-ink);
+}
+
+.conversation-item.active {
+  background: var(--pc-primary-soft);
+  color: #b85f3c;
+}
+
+.conversation-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.conversation-item strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-item small {
+  flex: 0 0 auto;
+  color: #ac9f94;
+  font-size: 10px;
 }
 
 .capability-list {
@@ -359,6 +958,28 @@ const roadmap = [
 @media (max-width: 1050px) {
   .agent-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chat-shell {
+    height: 70vh;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .bubble {
+    max-width: 88%;
+  }
+
+  .draft-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chat-input {
+    padding: 12px 14px;
   }
 }
 </style>

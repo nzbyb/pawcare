@@ -165,3 +165,37 @@ export interface DailyReport {
   photos?: string[] | null
   created_by?: number | null
 }
+
+export interface AgentToolEvent {
+  name: string
+  status: string
+  summary: string
+  latency_ms?: number | null
+}
+
+export interface AgentChatResponse {
+  conversation_id: number
+  trace_id: string
+  content: string
+  draft: BoardingDraft | null
+  tool_events: AgentToolEvent[]
+}
+
+export interface AgentConversation {
+  id: number
+  title: string
+  last_message_at: string
+  create_time?: string | null
+}
+
+export interface AgentHistoryMessage {
+  id: number
+  role: string
+  content: string
+  tool_calls?: unknown
+  tool_call_id?: string | null
+  token_in?: number | null
+  token_out?: number | null
+  latency_ms?: number | null
+  create_time?: string | null
+}

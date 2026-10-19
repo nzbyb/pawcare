@@ -33,9 +33,12 @@ class AgentMessage(Base):
         String(20), nullable=False, comment="user / assistant / tool / system"
     )
     content: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    tool_calls: Mapped[dict | None] = mapped_column(JsonType)
+    tool_calls: Mapped[list | dict | None] = mapped_column(JsonType)
     tool_call_id: Mapped[str | None] = mapped_column(String(100))
     trace_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    token_in: Mapped[int | None] = mapped_column()
+    token_out: Mapped[int | None] = mapped_column()
+    latency_ms: Mapped[int | None] = mapped_column()
 
 
 class AgentToolCall(Base):
