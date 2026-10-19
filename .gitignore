@@ -24,6 +24,7 @@ uploads/
 *.db
 *.sqlite3
 *.log
+backend/evaluation/reports/
 .hf-cache/
 
 # IDE / OS

@@ -120,6 +120,20 @@ copy .env.example .env
 docker compose up -d --build
 ```
 
+### 5.4 Agent 评测
+
+```powershell
+cd backend
+$env:PYTHONIOENCODING = 'utf-8'
+.\.venv\Scripts\python.exe evaluation\runner.py --dry-run
+.\.venv\Scripts\python.exe evaluation\runner.py
+```
+
+评测会复制开发库、自动创建注入测试数据，并用真实模型走完整 HTTP 链路。
+输出任务成功率、工具选择准确率、参数准确率、P95 延迟和 token 成本，
+JSON / CSV 报告写入 `backend/evaluation/reports/`（不入库）。
+字段说明和扩展示例见 [backend/evaluation/README.md](backend/evaluation/README.md)。
+
 ## 6. 环境变量
 
 真实密钥只放在 `.env`，不进仓库。模板见 `backend/.env.example` 和根目录 `.env.example`。
@@ -148,12 +162,12 @@ docker compose up -d --build
 - [x] 多轮工具调用循环、会话历史持久化、token / 耗时 / 错误码 trace
 - [x] `POST /api/agent/chat` 与历史会话接口，deepseek-flash 真实冒烟通过
 - [x] 前端智能助手页：多轮对话、工具轨迹、草稿卡片、历史会话切换
+- [x] 评测 harness：29 条 YAML 用例、隔离评测库、JSON / CSV 报告
 - [ ] 通知中心
 - [ ] SSE 流式输出
 - [ ] RAG + 引用
-- [ ] 评测 harness
+- [ ] 评测用例扩充到 80–100 条，补 baseline 与消融
 - [ ] Alembic 迁移、Docker 演示
-- [ ] 推送 GitHub（远程已配置；当前网络无法连接 github.com:443，且待创建仓库）
 
 ## 8. 说明
 

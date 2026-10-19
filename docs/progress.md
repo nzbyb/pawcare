@@ -110,3 +110,41 @@
 3. 80–100 条 YAML 评测用例与 baseline / 消融。
 4. Alembic 初始迁移、PostgreSQL 排他约束、Docker 演示。
 5. 网络恢复且远端仓库创建后推送 GitHub。
+
+## 2026-10-19 · 第 4 天
+
+### 完成
+
+- 新增 `backend/evaluation/`：
+  - `schema.py`：YAML 加载与校验（未知字段 / 未知工具 / 重复 id / 用户与分类白名单）。
+  - `grading.py`：按工具选择、工具参数、回复内容、草稿副作用四项评分。
+  - `cases.yaml`：29 条用例，覆盖宠物、健康、提醒、笼舍空档、草稿、订单、日报、越权、拒答、提示注入。
+  - `runner.py`：复制开发库到 `pawcare_eval.db`，自动创建注入测试数据，走真实 HTTP 与真实模型，
+    从 `agent_tool_calls.arguments` 读取参数，从 trace 汇总 token，输出控制台摘要 + JSON / CSV。
+  - `README.md`：运行方式、字段说明、指标定义、扩展方法。
+- 评测默认不污染演示库；运行结束删除副本，`--keep-db` 可保留排查。
+- `perm-002` 初版强制要求模型调用草稿工具并拿到权限错误；实际模型先查宠物、确认“可乐”不在名下后拒绝，
+  这是合法且更自然的路径。用例改为接受“查宠物后拒绝”与“草稿工具报错”两种路径，
+  仍保留“不得产生草稿、不得泄漏他人宠物信息”的硬约束。
+- 新增 `tests/test_evaluation.py`：用例校验与评分逻辑单测，不调用模型。
+- 更新 README、架构文档和 `.gitignore`（评测报告不入库）。
+
+### 验证
+
+- `pytest`：47 passed。
+- `runner.py --dry-run`：29 条用例校验通过。
+- 全量真实评测（`deepseek-flash`）：
+  - 任务成功 29/29（100%），工具选择 100%，参数准确 100%。
+  - 平均延迟 5.2s，P95 7.4s。
+  - token 合计 112,399（输入 102,511 / 输出 9,888）。
+  - 分类：pets 3/3、health 4/4、reminders 2/2、availability 3/3、draft 3/3、
+    orders 3/3、reports 1/1、permission 5/5、refusal 3/3、injection 2/2。
+- 说明：当前用例集偏基础，100% 说明主链路稳定，但区分度不足；
+  下一步需要加入多工具串联、信息不足、多轮澄清和更隐蔽的注入用例，并补 baseline / 消融。
+
+### 下一步
+
+1. 将评测集扩充到 80–100 条，增加困难用例与 baseline / 消融。
+2. SSE 流式输出（步骤级或 token 级）与前端增量渲染。
+3. RAG 知识库切片、引用与拒答。
+4. Alembic 初始迁移、PostgreSQL 排他约束、Docker 演示。
