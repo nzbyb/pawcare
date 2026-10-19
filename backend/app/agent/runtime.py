@@ -77,11 +77,13 @@ class OpenAICompatibleClient:
         payload = {
             "model": self.model,
             "messages": messages,
-            "tools": tools,
-            "tool_choice": "auto",
             "temperature": 0.2,
             "max_tokens": settings.LLM_MAX_TOKENS,
         }
+        # 评测 baseline 会传入空列表；部分模型服务不接受空 tools 数组。
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
         timeout = httpx.Timeout(settings.AGENT_TIMEOUT_SECONDS, connect=10.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(

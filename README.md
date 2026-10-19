@@ -145,6 +145,14 @@ $env:PYTHONIOENCODING = 'utf-8'
 评测会复制开发库、自动创建注入测试数据，并用真实模型走完整 HTTP 链路。
 输出任务成功率、工具选择准确率、参数准确率、P95 延迟和 token 成本，
 JSON / CSV 报告写入 `backend/evaluation/reports/`（不入库）。
+
+baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag` /
+`no_permission` / `no_citation` / `no_draft_confirmation`）：
+
+```powershell
+.\.venv\Scripts\python.exe evaluation\runner.py --cases evaluation\ablation_cases.yaml --variant no_rag
+```
+
 字段说明和扩展示例见 [backend/evaluation/README.md](backend/evaluation/README.md)。
 
 ## 6. 环境变量
@@ -180,11 +188,11 @@ JSON / CSV 报告写入 `backend/evaluation/reports/`（不入库）。
 - [x] 前端智能助手页：多轮对话、工具轨迹、草稿卡片、历史会话切换
 - [x] SSE 流式输出：步骤事件 + 前端增量渲染
 - [x] RAG：14 篇护理知识、混合检索、来源标注、拒答与注入防护
-- [x] 评测 harness：34 条 YAML 用例、隔离评测库、JSON / CSV 报告
+- [x] 评测 harness：91 条 YAML 用例、隔离评测库、JSON / CSV 报告
 - [x] Alembic 初始迁移、pgvector 余弦检索与订单排他约束
 - [ ] Docker Compose 启动验证（本机 Docker daemon 未运行）
 - [ ] 通知中心
-- [ ] 评测用例扩充到 80–100 条，补 baseline 与消融
+- [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
 
 ## 8. 说明
 

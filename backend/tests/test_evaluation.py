@@ -7,6 +7,9 @@ from evaluation.runner import is_model_fallback
 from evaluation.schema import CaseError, EvalCase, load_cases
 
 CASES_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "cases.yaml"
+ABLATION_PATH = (
+    Path(__file__).resolve().parents[1] / "evaluation" / "ablation_cases.yaml"
+)
 
 
 def make_case(**overrides) -> EvalCase:
@@ -21,7 +24,7 @@ def make_case(**overrides) -> EvalCase:
 
 def test_repository_cases_load() -> None:
     cases = load_cases(CASES_PATH)
-    assert len(cases) >= 34
+    assert len(cases) >= 80
     assert len({case.id for case in cases}) == len(cases)
     assert {case.category for case in cases} >= {
         "pets",
@@ -29,7 +32,38 @@ def test_repository_cases_load() -> None:
         "knowledge",
         "permission",
         "injection",
+        "multi",
+        "clarify",
     }
+
+
+def test_ablation_cases_load() -> None:
+    cases = load_cases(ABLATION_PATH)
+    assert len(cases) == 12
+    assert {case.category for case in cases} >= {
+        "pets",
+        "knowledge",
+        "permission",
+        "draft",
+    }
+    confirm = next(case for case in cases if case.id == "abl-confirm-001")
+    assert "confirm_boarding_draft" in confirm.forbid_tools
+
+
+def test_variants_registry() -> None:
+    from evaluation import variants
+
+    assert set(variants.VARIANTS) == {
+        "full",
+        "no_tools",
+        "no_rag",
+        "no_permission",
+        "no_citation",
+        "no_draft_confirmation",
+    }
+    assert variants.describe("full") == "完整系统"
+    with pytest.raises(ValueError, match="未知评测变体"):
+        variants.apply_variant("not-a-variant")
 
 
 def test_unknown_field_rejected(tmp_path: Path) -> None:

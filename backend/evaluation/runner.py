@@ -35,6 +35,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from evaluation.grading import grade_case
 from evaluation.schema import EvalCase, CaseError, load_cases
+from evaluation.variants import VARIANTS, apply_variant, describe
 
 DEV_DB = BACKEND_DIR / "pawcare_dev.db"
 EVAL_DB = BACKEND_DIR / "pawcare_eval.db"
@@ -457,15 +458,18 @@ def write_report(
     metrics: dict[str, Any],
     model: str,
     report_dir: Path,
+    variant: str = "full",
 ) -> tuple[Path, Path]:
     report_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = report_dir / f"eval_{stamp}.json"
-    csv_path = report_dir / f"eval_{stamp}.csv"
+    json_path = report_dir / f"eval_{stamp}_{variant}.json"
+    csv_path = report_dir / f"eval_{stamp}_{variant}.csv"
 
     payload = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "model": model,
+        "variant": variant,
+        "variant_description": describe(variant),
         "metrics": metrics,
         "results": [item.to_dict() for item in results],
     }
@@ -563,6 +567,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--strict", action="store_true", help="有失败用例时返回非零退出码"
     )
+    parser.add_argument(
+        "--variant",
+        choices=sorted(VARIANTS),
+        default="full",
+        help="评测变体：baseline 或消融实验（默认 full）",
+    )
     return parser.parse_args()
 
 
@@ -633,6 +643,12 @@ def main() -> int:
     from fastapi.testclient import TestClient
     from app.main import app
 
+    # 变体只改当前评测进程内的注册表 / 提示词，必须在 app 导入之后、
+    # TestClient 启动之前应用。
+    apply_variant(args.variant)
+    if args.variant != "full":
+        print(f"评测变体：{args.variant}（{describe(args.variant)}）")
+
     results: list[CaseResult] = []
     with TestClient(app) as client:
         tokens = {
@@ -670,6 +686,7 @@ def main() -> int:
             metrics,
             settings.LLM_MODEL,
             Path(args.report_dir),
+            args.variant,
         )
         print(f"报告：{json_path}")
         print(f"      {csv_path}")

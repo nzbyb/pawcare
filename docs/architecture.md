@@ -143,9 +143,14 @@ POST /api/boarding/drafts/{id}/confirm
 ## 6. 评测（论文阶段）
 
 - 当前 harness：`backend/evaluation/`，YAML 用例 + 独立 SQLite 副本 + 真实模型 + JSON / CSV 报告。
-- 现有 34 条用例，覆盖宠物、健康、提醒、笼舍空档、草稿、订单、日报、知识检索、越权、拒答、注入。
-- 目标扩展到 80–100 条，并加入需要多工具串联、信息不足和多轮澄清的困难用例。
-- 基线：无工具直答 vs 单轮函数调用 vs 显式多轮循环 + 完整系统（RAG、权限、草稿确认）。
-- 消融：去 RAG、去权限过滤、去草稿确认、去引用约束。
+- 主评测集 91 条，覆盖宠物、健康、提醒、笼舍空档、草稿、订单、日报、知识检索、
+  越权、拒答、提示注入、多工具串联和多轮澄清。
+- baseline / 消融在 `evaluation/variants.py` 中实现，仅在评测进程内替换注册表或提示词：
+  - `no_tools`：无工具直答，作为 baseline；
+  - `no_rag`：移除 `search_care_knowledge`；
+  - `no_permission`：读工具改用合成管理员身份，测量行级泄漏；
+  - `no_citation`：移除“（来源：标题）”约束；
+  - `no_draft_confirmation`：注册仅评测存在的 `confirm_boarding_draft`，模拟 Agent 自行下单。
+- 消融专用用例在 `evaluation/ablation_cases.yaml`，报告名带变体后缀，便于横向对比。
 - 指标：工具选择准确率、参数准确率、端到端成功率、引用忠实度、拒答准确率、注入抵抗率、P95 延迟、token 成本。
 - 参数评分读取 `agent_tool_calls.arguments`，不依赖模型自述；越权用例同时检查草稿副作用。

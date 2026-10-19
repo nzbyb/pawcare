@@ -72,3 +72,32 @@ $env:PYTHONIOENCODING = 'utf-8'
 ## 增加用例
 
 直接编辑 `cases.yaml`。`schema.py` 会在运行前校验未知字段、重复 id、未知工具名和未知用户，`--dry-run` 可用于快速检查。
+
+## baseline 与消融
+
+消融开关只在评测进程内生效（`evaluation/variants.py`），不会进入生产代码。
+
+| 变体 | 改动 |
+| --- | --- |
+| `full` | 完整系统，默认 |
+| `no_tools` | 不给模型任何工具，作为无工具 baseline |
+| `no_rag` | 从工具注册表移除 `search_care_knowledge` |
+| `no_permission` | 读工具改用合成管理员身份，绕过行级过滤 |
+| `no_citation` | 系统提示中去掉“（来源：标题）”约束 |
+| `no_draft_confirmation` | 注册仅评测存在的确认工具，模拟 Agent 自行下单 |
+
+```powershell
+# 同一套消融用例跑 full 和各变体
+.\.venv\Scripts\python.exe evaluation\runner.py --cases evaluation\ablation_cases.yaml
+.\.venv\Scripts\python.exe evaluation\runner.py --cases evaluation\ablation_cases.yaml --variant no_rag
+
+# 一次跑完（PowerShell）
+foreach ($v in 'full','no_tools','no_rag','no_permission','no_citation','no_draft_confirmation') {
+  .\.venv\Scripts\python.exe evaluation\runner.py --cases evaluation\ablation_cases.yaml --variant $v
+}
+```
+
+报告文件名带变体后缀（`eval_<时间戳>_<variant>.json|csv`），JSON 里也记录 `variant` 与说明。
+`no_tools` 会发送不带 `tools` 字段的请求；`no_draft_confirmation` 放在消融用例最后，
+因为它可能真的在评测副本里创建订单。
+

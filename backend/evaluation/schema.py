@@ -38,6 +38,8 @@ KNOWN_CATEGORIES = frozenset(
         "permission",
         "refusal",
         "injection",
+        "multi",
+        "clarify",
     }
 )
 
