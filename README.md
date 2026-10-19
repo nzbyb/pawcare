@@ -130,7 +130,7 @@ docker compose up -d --build
 - [ ] RAG + 引用
 - [ ] 评测 harness
 - [ ] Alembic 迁移、Docker 演示
-- [ ] 推送 GitHub（等待仓库地址）
+- [ ] 推送 GitHub（远程已配置；当前网络无法连接 github.com:443，且待创建仓库）
 
 ## 8. 说明
 
