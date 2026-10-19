@@ -1,0 +1,203 @@
+:root {
+  --pc-bg: #fbf7f2;
+  --pc-bg-deep: #f5ede4;
+  --pc-surface: #ffffff;
+  --pc-primary: #e8835a;
+  --pc-primary-soft: #fdf0e9;
+  --pc-sage: #7c9a82;
+  --pc-sage-soft: #eef3ee;
+  --pc-ink: #2e2a27;
+  --pc-ink-soft: #6f665f;
+  --pc-line: #ede4da;
+  --pc-shadow: 0 12px 32px rgba(116, 88, 63, 0.08);
+  --pc-shadow-hover: 0 18px 40px rgba(116, 88, 63, 0.14);
+  --pc-radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--pc-ink);
+  background-color: var(--pc-bg);
+  background-image:
+    radial-gradient(circle at 8% 0%, rgba(232, 131, 90, 0.12), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(124, 154, 130, 0.12), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(232, 131, 90, 0.06), transparent 42%);
+  background-attachment: fixed;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.page {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 28px 56px;
+  animation: page-in 0.36s ease both;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  margin: 8px 0 0;
+  color: var(--pc-ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.section-title {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.muted {
+  color: var(--pc-ink-soft);
+}
+
+.soft-card {
+  border: 1px solid rgba(237, 228, 218, 0.9);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: var(--pc-shadow);
+  border-radius: var(--pc-radius);
+  backdrop-filter: blur(12px);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--pc-primary-soft);
+  color: #b85f3c;
+}
+
+.pill.sage {
+  background: var(--pc-sage-soft);
+  color: #4f6f57;
+}
+
+.pill.grey {
+  background: #f3f0ec;
+  color: #756c64;
+}
+
+.grid {
+  display: grid;
+  gap: 18px;
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fade-up {
+  animation: fade-up 0.45s ease both;
+}
+
+.fade-up.delay-1 {
+  animation-delay: 0.06s;
+}
+
+.fade-up.delay-2 {
+  animation-delay: 0.12s;
+}
+
+.fade-up.delay-3 {
+  animation-delay: 0.18s;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #d9cec2;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #c7b9aa;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (max-width: 900px) {
+  .grid-2,
+  .grid-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page {
+    padding: 20px 16px 40px;
+  }
+
+  .page-header {
+    flex-direction: column;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+}
