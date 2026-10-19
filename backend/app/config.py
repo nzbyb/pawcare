@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     AGENT_TIMEOUT_SECONDS: int = 30
     LLM_MAX_TOKENS: int = 1024
 
+    # RAG：本地开发用 fastembed + SQLite；生产环境同一套接口可切到 pgvector。
+    RAG_ENABLED: bool = True
+    RAG_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
+    RAG_CACHE_DIR: str = ".fastembed_cache"
+    RAG_TOP_K: int = 3
+    RAG_MIN_SCORE: float = 0.45
+
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE_MB: int = 10
 

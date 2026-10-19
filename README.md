@@ -13,7 +13,7 @@
 | 缓存/限流 | Redis 7（可选，未启动时退回进程内存） |
 | 鉴权 | JWT + bcrypt，三角色：宠物主 / 寄养员 / 管理员 |
 | Agent | 显式工具调用循环 + 步骤级 SSE（httpx + OpenAI 兼容接口），后续可替换为 LangGraph |
-| RAG | pgvector + bge-small-zh-v1.5，回答带引用 |
+| RAG | fastembed + bge-small-zh-v1.5（512 维），向量 + 词法混合检索；生产保留 pgvector 路径 |
 | 定时 | APScheduler（单进程） |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
 | UI | Naive UI + ECharts，自定义暖色主题 |
@@ -146,6 +146,9 @@ JSON / CSV 报告写入 `backend/evaluation/reports/`（不入库）。
 | `LLM_MODEL` | 当前使用 `deepseek-flash` |
 | `LLM_BASE_URL` | `https://api.deepseek.com` |
 | `REDIS_URL` | 留空时使用进程内限流 |
+| `RAG_ENABLED` | 是否启用知识库检索，默认 `true` |
+| `RAG_EMBEDDING_MODEL` | 默认 `BAAI/bge-small-zh-v1.5` |
+| `RAG_TOP_K` / `RAG_MIN_SCORE` | 返回片段数与混合检索阈值 |
 
 ## 7. 当前进度
 
@@ -158,14 +161,14 @@ JSON / CSV 报告写入 `backend/evaluation/reports/`（不入库）。
 - [x] 寄养主流程：笼舍、空档查询、草稿确认、订单状态流转、日报
 - [x] 演示数据 seed 脚本（账号 / 宠物 / 健康记录 / 笼舍 / 订单）
 - [x] 寄养前端页面：空档查询、草稿倒计时确认、订单流转、日报
-- [x] Agent 工具层：7 个权限感知工具，工具注册表中没有确认工具
+- [x] Agent 工具层：8 个权限感知工具，工具注册表中没有确认工具
 - [x] 多轮工具调用循环、会话历史持久化、token / 耗时 / 错误码 trace
 - [x] `POST /api/agent/chat` 与历史会话接口，deepseek-flash 真实冒烟通过
 - [x] 前端智能助手页：多轮对话、工具轨迹、草稿卡片、历史会话切换
 - [x] SSE 流式输出：步骤事件 + 前端增量渲染
-- [x] 评测 harness：29 条 YAML 用例、隔离评测库、JSON / CSV 报告
+- [x] RAG：14 篇护理知识、混合检索、来源标注、拒答与注入防护
+- [x] 评测 harness：34 条 YAML 用例、隔离评测库、JSON / CSV 报告
 - [ ] 通知中心
-- [ ] RAG + 引用
 - [ ] 评测用例扩充到 80–100 条，补 baseline 与消融
 - [ ] Alembic 迁移、Docker 演示
 

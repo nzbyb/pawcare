@@ -24,6 +24,7 @@ uploads/
 *.db
 *.sqlite3
 *.log
+.fastembed_cache/
 backend/evaluation/reports/
 .hf-cache/
 

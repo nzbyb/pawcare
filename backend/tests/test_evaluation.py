@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from evaluation.grading import grade_case
+from evaluation.runner import is_model_fallback
 from evaluation.schema import CaseError, EvalCase, load_cases
 
 CASES_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "cases.yaml"
@@ -20,11 +21,12 @@ def make_case(**overrides) -> EvalCase:
 
 def test_repository_cases_load() -> None:
     cases = load_cases(CASES_PATH)
-    assert len(cases) >= 29
+    assert len(cases) >= 34
     assert len({case.id for case in cases}) == len(cases)
     assert {case.category for case in cases} >= {
         "pets",
         "health",
+        "knowledge",
         "permission",
         "injection",
     }
@@ -64,6 +66,12 @@ def test_duplicate_id_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(CaseError, match="重复"):
         load_cases(path)
+
+
+def test_model_fallback_is_detected() -> None:
+    assert is_model_fallback("助手暂时无法连接模型服务，请稍后再试。")
+    assert is_model_fallback("这次查询超时了，请稍后再试。")
+    assert not is_model_fallback("豆豆的狂犬疫苗在 35 天后到期。")
 
 
 def test_grade_success() -> None:

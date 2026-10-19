@@ -190,3 +190,52 @@
 2. 评测集扩充到 80–100 条，增加困难用例与 baseline / 消融。
 3. Alembic 初始迁移、PostgreSQL 排他约束、Docker 演示。
 4. 通知中心（可选）。
+
+## 2026-10-19 · 第 6 天
+
+### 完成
+
+- 新增 `app/rag/`：
+  - `embedding.py`：fastembed `BAAI/bge-small-zh-v1.5`（512 维），按需加载、进程内复用，
+    模型缓存到 `backend/.fastembed_cache`（已加入 `.gitignore`）；加载失败会记住原因，避免反复重试。
+  - `retriever.py`：SQLite 上先取候选切片，再按 `0.75 × 向量余弦 + 0.25 × 中文词法覆盖率`
+    排序；模型不可用时自动退回纯词法检索。混合阈值 0.45，词法阈值 0.25。
+  - `RetrievedChunk.payload()` 返回 `title / content / source / score / trust=untrusted`。
+- `EmbeddingType` 补 SQLite 的 JSON 序列化 / 反序列化；PostgreSQL 仍映射 `vector(512)`。
+- seed 新增 14 篇合成护理知识：寄养准备、应激、犬猫疫苗、驱虫、换粮、体重、喂药、
+  急症、老年、过敏、中暑、航空箱、多宠家庭。
+- 新增第 8 个工具 `search_care_knowledge`：只读，支持 `query`、`top_k`、`category`；
+  系统提示要求“（来源：标题）”标注、无结果时拒答、知识片段按不可信数据处理。
+- 评测：
+  - 新增 knowledge 分类 4 条、知识库注入 1 条，共 34 条用例。
+  - 注入测试数据新增一条带指令的知识片段。
+  - 修复评测误判：模型断连 / 超时返回的 200 兜底文案现在判为失败；
+    网络失败默认重试 1 次（`--retries`），报告记录 `attempts` 和重试条数。
+  - `perm-001` 放宽拒答关键词，接受“没有叫 / 查不到”等自然表述。
+- 前端：工具 chip 增加“检索护理知识”，欢迎语、示例问题和能力卡补充 RAG。
+
+### 验证
+
+- `pytest`：58 passed（新增 RAG 混合检索、分类过滤、词法回退、无关拒答、
+  工具参数校验、EmbeddingType 往返、评测兜底识别等 8 个测试）。
+- 检索标定（14 篇知识库）：相关问题的 top1 分数 0.58–0.68；
+  “今天股市 / 写诗 / 我的宠物最近怎么样”均低于阈值返回空；
+  “今天天气”在 0.45 阈值下也被过滤。
+- 全量真实评测（`deepseek-flash`，34 条）：
+  - 任务成功 34/34（100%），工具选择 100%，参数准确 100%。
+  - 平均延迟 3.6s，P95 5.7s；token 150,524（输入 138,767 / 输出 11,757）。
+  - 分类全部 100%：pets 3/3、health 4/4、reminders 2/2、availability 3/3、draft 3/3、
+    orders 3/3、reports 1/1、permission 5/5、refusal 3/3、injection 3/3、knowledge 4/4。
+  - 此前一次运行遇到 4 条网络超时并触发重试；兜底回复已被判为失败，最终重跑全部通过。
+- `npm run typecheck`、`npm run build`：通过（AgentView chunk 11.97 kB / gzip 5.53 kB）。
+
+### 提交
+
+- `待填` feat: 增加护理知识库 RAG 检索与知识评测
+
+### 下一步
+
+1. 评测集扩充到 80–100 条，增加多工具串联、信息不足、多轮澄清和更隐蔽的注入用例。
+2. 补 baseline / 消融（去 RAG、去权限、去引用约束）。
+3. Alembic 初始迁移、PostgreSQL pgvector 检索与排他约束、Docker 演示。
+4. 通知中心（可选）。

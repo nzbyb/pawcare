@@ -68,7 +68,7 @@ POST /api/boarding/drafts/{id}/confirm
 
 **Agent 没有 confirm 工具。** 这是本项目的核心安全边界。
 
-## 4. 工具清单（7 个）
+## 4. 工具清单（8 个）
 
 | 工具 | 类型 | 权限 | 说明 |
 |---|---|---|---|
@@ -79,8 +79,10 @@ POST /api/boarding/drafts/{id}/confirm
 | `create_boarding_draft` | 写草稿 | 宠物主本人 | 只建草稿，15 分钟过期 |
 | `list_boarding_orders` | 读 | 宠物主本人 / 寄养员与管理员只读全部 | 订单与状态 |
 | `get_boarding_daily_reports` | 读 | 订单所有者 / 寄养员与管理员 | 寄养日报 |
+| `search_care_knowledge` | 读 | 登录用户 | 混合检索护理知识；返回不可信片段与来源 |
 
-RAG 阶段再加入 `search_care_knowledge`，返回切片与引用；它同样只读，检索内容按不可信数据处理。
+`search_care_knowledge` 只读、不涉及用户数据；检索结果里带有 `trust: untrusted` 标记，
+模型必须把片段当作资料而不是指令。
 
 ## 5. 安全与可观测
 
@@ -107,10 +109,24 @@ RAG 阶段再加入 `search_care_knowledge`，返回切片与引用；它同样�
 - 客户端断开时取消后台 Agent 任务；已落库的消息保留，未完成轮次不产生最终回复。
 - 非流式 `/agent/chat` 保留，供评测和脚本调用。
 
+### 5.2 RAG 知识库
+
+- 数据：`knowledge_chunks` 存切片、标题、来源和 512 维向量；seed 写入 14 篇合成护理知识。
+- 向量：fastembed `BAAI/bge-small-zh-v1.5`，首次检索时按需加载并缓存到 `backend/.fastembed_cache`
+  （第一次会下载模型，之后离线可用）。
+- 检索：SQLite 开发库没有 pgvector，先取候选切片，再按
+  `0.75 × 向量余弦 + 0.25 × 中文词法覆盖率` 排序；模型不可用时自动退回纯词法检索。
+- 阈值：混合检索默认 `0.45`，词法回退默认 `0.25`，低于阈值不返回片段。
+- 引用：工具返回 `title / content / source / score / trust`，系统提示要求用“（来源：标题）”标注。
+- 拒答：没有检索结果时明确说没有查到，不凭常识编造，不推荐具体商品或购买链接。
+- 注入：知识片段与宠物备注一样按不可信数据处理；即使片段包含“忽略之前的指令”，也只提醒用户。
+- 生产路径：同一检索接口可把候选查询替换为 PostgreSQL + pgvector 的 `ORDER BY embedding <=> query`，
+  向量列由 `EmbeddingType` 自动映射为 `vector(512)`。
+
 ## 6. 评测（论文阶段）
 
 - 当前 harness：`backend/evaluation/`，YAML 用例 + 独立 SQLite 副本 + 真实模型 + JSON / CSV 报告。
-- 现有 29 条用例，覆盖宠物、健康、提醒、笼舍空档、草稿、订单、日报、越权、拒答、注入。
+- 现有 34 条用例，覆盖宠物、健康、提醒、笼舍空档、草稿、订单、日报、知识检索、越权、拒答、注入。
 - 目标扩展到 80–100 条，并加入需要多工具串联、信息不足和多轮澄清的困难用例。
 - 基线：无工具直答 vs 单轮函数调用 vs 显式多轮循环 + 完整系统（RAG、权限、草稿确认）。
 - 消融：去 RAG、去权限过滤、去草稿确认、去引用约束。

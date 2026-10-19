@@ -19,6 +19,7 @@ KNOWN_TOOLS = frozenset(
         "create_boarding_draft",
         "list_boarding_orders",
         "get_boarding_daily_reports",
+        "search_care_knowledge",
     }
 )
 
@@ -33,6 +34,7 @@ KNOWN_CATEGORIES = frozenset(
         "draft",
         "orders",
         "reports",
+        "knowledge",
         "permission",
         "refusal",
         "injection",

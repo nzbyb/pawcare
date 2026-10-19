@@ -23,6 +23,7 @@ const router = useRouter()
 
 const examples = [
   '豆豆下一次疫苗什么时候到期？',
+  '第一次寄养狗狗需要准备哪些东西？',
   '帮我看看下个月有没有适合中型犬的笼舍。',
   '给豆豆预约 11 月 1 日到 11 月 5 日的寄养。',
 ]
@@ -32,6 +33,11 @@ const capabilities = [
     icon: '🔎',
     title: '查档案',
     text: '按宠物名和时间范围查询疫苗、驱虫、就诊记录。',
+  },
+  {
+    icon: '📚',
+    title: '护理知识',
+    text: '检索寄养、疫苗、驱虫、换粮等知识，并标注来源。',
   },
   {
     icon: '📅',
@@ -56,7 +62,7 @@ const roadmap = [
   { label: 'Agent 工具层与多轮调用', done: true },
   { label: '会话持久化与 trace', done: true },
   { label: 'SSE 流式输出', done: true },
-  { label: 'RAG 知识库与引用', done: false },
+  { label: 'RAG 知识库与引用', done: true },
   { label: '评测集与消融实验', done: false },
 ]
 
@@ -68,6 +74,7 @@ const toolLabels: Record<string, string> = {
   create_boarding_draft: '生成预约草稿',
   list_boarding_orders: '查询寄养订单',
   get_boarding_daily_reports: '查询每日报告',
+  search_care_knowledge: '检索护理知识',
 }
 
 const messages = ref<ChatBubble[]>([])
@@ -332,7 +339,7 @@ onMounted(() => {
             <div class="assistant-bubble">
               <p>
                 你好，我是 PawCare 助手。可以帮你查宠物档案、健康记录和疫苗提醒，
-                也能查询寄养空档并生成预约草稿。
+                检索护理知识，也能查询寄养空档并生成预约草稿。
               </p>
               <p class="bubble-note">
                 涉及预约的操作只会生成草稿，必须由你在寄养页确认后才会生效。

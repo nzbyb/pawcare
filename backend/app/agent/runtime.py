@@ -186,6 +186,11 @@ def _summarize(name: str, result: dict) -> str:
         return f"返回 {len(data.get('orders', []))} 笔订单"
     if name == "get_boarding_daily_reports":
         return f"返回 {len(data.get('reports', []))} 条日报"
+    if name == "search_care_knowledge":
+        chunks = data.get("chunks", [])
+        if not chunks:
+            return "知识库未检索到相关内容"
+        return f"检索到 {len(chunks)} 条护理知识（{data.get('retrieval_mode')}）"
     return "执行成功"
 
 

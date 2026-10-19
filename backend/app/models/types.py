@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import Text, TypeDecorator
@@ -25,3 +27,19 @@ class EmbeddingType(TypeDecorator):
         if dialect.name == "postgresql" and Vector is not None:
             return dialect.type_descriptor(Vector(512))
         return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql" and Vector is not None:
+            return value
+        return json.dumps([float(item) for item in value], ensure_ascii=False)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql" and Vector is not None:
+            return value
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
