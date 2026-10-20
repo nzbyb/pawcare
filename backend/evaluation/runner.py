@@ -124,7 +124,19 @@ def _eval_url(dev_url: str) -> str:
     url = make_url(dev_url)
     if url.get_backend_name() == "sqlite":
         return f"sqlite:///{EVAL_DB.as_posix()}"
-    return str(url.set(database=f"{url.database}{EVAL_DB_SUFFIX}"))
+    # 必须显式关闭密码打码：str(URL) 会把密码替换成 ***。
+    return url.set(database=f"{url.database}{EVAL_DB_SUFFIX}").render_as_string(
+        hide_password=False
+    )
+
+
+def _server_engine(url):
+    """连到实例本身（不选默认库），用于 CREATE / DROP DATABASE。"""
+    return create_engine(
+        url.set(database=""),
+        isolation_level="AUTOCOMMIT",
+        hide_parameters=True,
+    )
 
 
 def prepare_database(keep_db: bool, dev_url: str) -> tuple[str, bool]:
@@ -144,9 +156,7 @@ def prepare_database(keep_db: bool, dev_url: str) -> tuple[str, bool]:
     # MySQL：DROP + CREATE 后建表并 seed，与演示库完全隔离。
     url = make_url(eval_url)
     name = url.database
-    server = create_engine(
-        url.set(database=None), isolation_level="AUTOCOMMIT", hide_parameters=True
-    )
+    server = _server_engine(url)
     try:
         with server.connect() as conn:
             conn.execute(text(f"DROP DATABASE IF EXISTS `{name}`"))
@@ -168,9 +178,7 @@ def drop_eval_database(eval_url: str) -> None:
             EVAL_DB.unlink()
         return
     url = make_url(eval_url)
-    server = create_engine(
-        url.set(database=None), isolation_level="AUTOCOMMIT", hide_parameters=True
-    )
+    server = _server_engine(url)
     try:
         with server.connect() as conn:
             conn.execute(text(f"DROP DATABASE IF EXISTS `{url.database}`"))
