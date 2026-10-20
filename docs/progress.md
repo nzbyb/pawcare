@@ -436,3 +436,41 @@
   松绿圆角方块 + 白色几何爪印，爪印由四个倾斜胶囊和一块圆角脚垫组成。
 - 侧边栏、移动端顶栏、登录页、favicon 和 README 统一使用同一标识；
   深色背景使用白底松绿爪印的反色版本。
+
+## 2026-10-20 · 第 11 天
+
+### 目标
+
+- 数据库从 PostgreSQL / pgvector 切回 MySQL：本机与部署统一 MySQL，SQLite 只保留给 pytest。
+- 不改变业务接口、Agent 工具和评测指标，只替换存储实现。
+
+### 完成内容
+
+- 连接层：
+  - `config.py` 默认 `mysql+pymysql://…/pawcare?charset=utf8mb4`。
+  - `database.py` 按 URL 判断方言，MySQL 加 `pool_pre_ping` + `pool_recycle=3600`，
+    避免 `MySQL server has gone away`；SQLite 仅测试时保留 `check_same_thread=False`。
+- 模型：`models/types.py` 去掉 pgvector，`EmbeddingType` 以 JSON 文本存 MySQL `TEXT`；
+  `JsonType` 统一用 `sa.JSON()`（MySQL 原生 JSON 列）。
+- 检索：`rag/retriever.py` 删除 PostgreSQL 分支和 HNSW 查询，
+  统一“取候选切片 + 应用层 0.75 余弦 / 0.25 词法”评分。
+- 迁移：初始迁移移除 `CREATE EXTENSION`、`JSONB` → `JSON`、HNSW 索引与
+  `EXCLUDE` 排他约束；档期冲突改由确认事务里的笼舍行锁保证。
+- 依赖：`psycopg[binary]` / `pgvector` → `PyMySQL` + `cryptography`（caching_sha2_password）。
+- 部署：`docker-compose.yml` 新增 `mysql:8.4`（宿主机 3307，避开本机 3306），
+  backend 等 MySQL healthy 后启动。
+- 评测：`evaluation/runner.py` 不再复制 `pawcare_dev.db`，
+  改为在 MySQL 同实例 `DROP/CREATE pawcare_eval` 后建表 + seed，结束后删除。
+- 启动：`main.py` 只在 SQLite（测试）下 `create_all`；MySQL 一律走 Alembic。
+- 文档：README、architecture、ER 同步为 MySQL + 应用层余弦检索。
+
+### 验证
+
+- `pytest`：全量通过（测试仍走临时 SQLite）。
+- 迁移在全新 SQLite 上 `upgrade head` → 重复执行 → `downgrade base` 通过。
+
+### 下一步
+
+1. 本机建 `pawcare` 库和账号，`alembic upgrade head` + `scripts/seed.py`，启动后端冒烟。
+2. 网络与 Docker 可用时执行 `docker compose up -d --build` 验证容器链路。
+3. 通知中心（可选）。

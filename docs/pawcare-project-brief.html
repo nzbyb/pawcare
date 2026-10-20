@@ -1119,8 +1119,8 @@
 
             <rect x="30" y="200" width="170" height="82" fill="var(--surface)" stroke="var(--line)"></rect>
             <text x="46" y="228" fill="var(--ink)" font-family="var(--body)" font-size="14" font-weight="700">数据库</text>
-            <text x="46" y="250" fill="var(--muted)" font-family="var(--body)" font-size="12">SQLite（本地）</text>
-            <text x="46" y="268" fill="var(--muted)" font-family="var(--body)" font-size="12">PostgreSQL（部署）</text>
+            <text x="46" y="250" fill="var(--muted)" font-family="var(--body)" font-size="12">MySQL 8+</text>
+            <text x="46" y="268" fill="var(--muted)" font-family="var(--body)" font-size="12">Alembic 迁移</text>
 
             <line x1="630" y1="241" x2="668" y2="241" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#arrow-muted)"></line>
             <text x="620" y="232" fill="var(--muted)" font-family="var(--mono)" font-size="10">检索</text>
@@ -1257,7 +1257,7 @@
 
       <h3>4.4 RAG：知识回答要有依据</h3>
       <p>知识库当前有 14 篇护理知识，使用 <span class="mono">BAAI/bge-small-zh-v1.5</span>（512 维）做向量检索，并与词法检索混合排序。回答要求标注“（来源：标题）”；没有足够依据时拒答。知识库片段、宠物备注和日报都按不可信上下文处理，防止提示注入。</p>
-      <p>生产路径保留 PostgreSQL + pgvector 与 HNSW 索引；本地开发用 SQLite 跑通链路，评测时复制隔离数据库，避免污染演示数据。</p>
+      <p>向量以 JSON 文本存 MySQL，不依赖数据库扩展；检索在应用层计算余弦相似度并与词法分混合，分类过滤同样在 Python 里完成。评测时在同实例建独立评测库 <span class="mono">pawcare_eval</span>，避免污染演示数据。</p>
     </div>
   </section>
 
@@ -1435,7 +1435,7 @@
             </tr>
             <tr>
               <td>部署验证</td>
-              <td>Docker Compose + Nginx + PostgreSQL / pgvector</td>
+              <td>Docker Compose + Nginx + MySQL</td>
               <td>待环境</td>
             </tr>
             <tr>
@@ -1461,7 +1461,7 @@
         <article class="mini-card">
           <p class="mini-label">下一步 02</p>
           <h3>部署验证</h3>
-          <p>把本地 SQLite 链路切到 PostgreSQL，跑通 Docker Compose、迁移和 Nginx 反向代理。</p>
+          <p>跑通 Docker Compose、MySQL 迁移和 Nginx 反向代理，验证容器内后端链路。</p>
         </article>
         <article class="mini-card">
           <p class="mini-label">下一步 03</p>

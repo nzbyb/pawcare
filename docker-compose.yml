@@ -1,20 +1,30 @@
 services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: pawcare-postgres
+  mysql:
+    image: mysql:8.4
+    container_name: pawcare-mysql
     environment:
-      POSTGRES_DB: pawcare
-      POSTGRES_USER: pawcare
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pawcare_dev_password}
+      MYSQL_DATABASE: pawcare
+      MYSQL_USER: pawcare
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-pawcare_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_dev_password}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
     ports:
-      - "5432:5432"
+      # 本机已有 MySQL 占用 3306 时，容器走 3307。
+      - "3307:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pawcare -d pawcare"]
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent",
+        ]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   redis:
     image: redis:7-alpine
@@ -34,7 +44,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://pawcare:${POSTGRES_PASSWORD:-pawcare_dev_password}@postgres:5432/pawcare
+      DATABASE_URL: mysql+pymysql://pawcare:${MYSQL_PASSWORD:-pawcare_dev_password}@mysql:3306/pawcare?charset=utf8mb4
       REDIS_URL: redis://redis:6379/0
       TZ: Asia/Shanghai
     ports:
@@ -44,7 +54,7 @@ services:
       # 首次检索会下载 BGE 模型；挂载后重建镜像不必重新下载。
       - ./backend/.fastembed_cache:/app/.fastembed_cache
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -59,4 +69,4 @@ services:
       - backend
 
 volumes:
-  postgres_data:
+  mysql_data:

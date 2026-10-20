@@ -1,45 +1,30 @@
 import json
 
 from sqlalchemy import JSON
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import Text, TypeDecorator
 
-try:
-    from pgvector.sqlalchemy import Vector
-except Exception:  # pragma: no cover - 没装 pgvector 时仍可跑 SQLite 测试
-    Vector = None
-
-# PostgreSQL 用 JSONB，SQLite 自动退回 JSON。
-JsonType = JSON().with_variant(JSONB, "postgresql")
+# MySQL / SQLite 通用：MySQL 会落到 JSON 列，SQLite 存 TEXT 并自动序列化。
+JsonType = JSON()
 
 
 class EmbeddingType(TypeDecorator):
     """512 维向量列。
 
-    PostgreSQL 上映射到 pgvector 的 vector(512)；
-    SQLite 上退回 TEXT，方便本地测试不依赖 pgvector。
+    以 JSON 文本存库（MySQL 为 TEXT），检索时在应用层计算余弦相似度。
+    知识库切片规模在千级以内，SQL 端无需向量类型。
     """
 
     impl = Text
     cache_ok = True
 
-    def load_dialect_impl(self, dialect):
-        if dialect.name == "postgresql" and Vector is not None:
-            return dialect.type_descriptor(Vector(512))
-        return dialect.type_descriptor(Text())
-
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
-        if dialect.name == "postgresql" and Vector is not None:
-            return value
         return json.dumps([float(item) for item in value], ensure_ascii=False)
 
     def process_result_value(self, value, dialect):
         if value is None:
             return None
-        if dialect.name == "postgresql" and Vector is not None:
-            return value
         if isinstance(value, str):
             return json.loads(value)
         return value

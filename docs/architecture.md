@@ -17,7 +17,7 @@ FastAPI + JWT + RBAC
               ├── RAG Retriever
               └── Trace Logger
 
-数据：PostgreSQL 16 + pgvector、Redis、本地 uploads/
+数据：MySQL 8+（PyMySQL）、Redis、本地 uploads/
 运维：Docker Compose + Nginx + APScheduler
 ```
 
@@ -114,20 +114,17 @@ POST /api/boarding/drafts/{id}/confirm
 - 数据：`knowledge_chunks` 存切片、标题、来源和 512 维向量；seed 写入 14 篇合成护理知识。
 - 向量：fastembed `BAAI/bge-small-zh-v1.5`，首次检索时按需加载并缓存到 `backend/.fastembed_cache`
   （第一次会下载模型，之后离线可用）。
-- 检索：SQLite 开发库没有 pgvector，先取候选切片，再按
+- 检索：向量以 JSON 文本存库（MySQL `TEXT`），不依赖数据库扩展。先取候选切片，再按
   `0.75 × 向量余弦 + 0.25 × 中文词法覆盖率` 排序；模型不可用时自动退回纯词法检索。
+  分类过滤在 Python 中完成，候选数取 `top_k × 4`（12–50）。
 - 阈值：混合检索默认 `0.45`，词法回退默认 `0.25`，低于阈值不返回片段。
 - 引用：工具返回 `title / content / source / score / trust`，系统提示要求用“（来源：标题）”标注。
 - 拒答：没有检索结果时明确说没有查到，不凭常识编造，不推荐具体商品或购买链接。
 - 注入：知识片段与宠物备注一样按不可信数据处理；即使片段包含“忽略之前的指令”，也只提醒用户。
-- 生产路径：PostgreSQL 上先用 `ORDER BY embedding <=> CAST(:q AS vector(512))`
-  取候选（HNSW 余弦索引），再在 Python 里叠加词法分，保证两种数据库的评分口径一致；
-  分类过滤走 JSONB `meta->>'category'`。
 - 迁移：[migrations/versions/39bc51a83f0d_initial_schema.py](../backend/migrations/versions/39bc51a83f0d_initial_schema.py)
-  在 PostgreSQL 上创建 `vector` / `btree_gist` 扩展、`vector(512)` 列、HNSW 索引，
-  并为活跃寄养订单添加日期区间排他约束。
-- 启动：SQLite 开发库仍由 `create_all` 建表；PostgreSQL 由 Alembic 管理，
-  容器 entrypoint 先执行 `alembic upgrade head` 再启动服务。
+  建全量表结构；MySQL 无 PostgreSQL 的 `EXCLUDE` 约束，档期冲突由应用层在确认事务中校验。
+- 启动：MySQL 表结构由 Alembic 管理，开发机执行 `alembic upgrade head`，
+  容器由 entrypoint 先迁移再启动服务；SQLite 只在 pytest 里由 `create_all` 建临时库。
 
 ### 5.3 数据库约束
 
@@ -135,10 +132,10 @@ POST /api/boarding/drafts/{id}/confirm
 |---|---|
 | `uq_knowledge_doc_chunk` | 同一文档的切片序号唯一，seed 可重复执行 |
 | `uq_daily_report_order_date` | 每笔订单每天只有一份日报 |
-| `ex_boarding_orders_active_period` | PostgreSQL 排他约束：同一笼舍的 `[start, end)` 活跃订单不得重叠 |
 | `ix_boarding_orders_draft_id`（唯一） | 一张草稿最多确认出一笔订单，支撑确认接口幂等 |
 
-排他约束与应用层档期校验形成双层保护：应用层负责友好报错，数据库层兜住并发确认。
+档期冲突由应用层档期校验 + 确认事务里的笼舍行锁兜住（`SELECT … FOR UPDATE`），
+MySQL 没有 PostgreSQL 的排他约束，因此不再建库级约束。
 
 ## 6. 调度引擎选型
 
@@ -196,7 +193,7 @@ START → agent ──(有 tool_calls)──→ tools ──→ agent
 
 这组差异主要来自模型每次选择不同（`refusal-001`、`knowledge-001` 多了一轮工具），
 不能直接归因于适配层。为隔离调度开销，另用脚本化 `FakeLLM` 跑固定两步工具循环，
-每边 25 次（SQLite、无网络）：
+每边 25 次（脚本化 FakeLLM、无网络）：
 
 | 实现 | 平均 | 中位数 | P95 |
 | --- | --- | --- | --- |
@@ -217,7 +214,7 @@ START → agent ──(有 tool_calls)──→ tools ──→ agent
 
 ## 7. 评测（论文阶段）
 
-- 当前 harness：`backend/evaluation/`，YAML 用例 + 独立 SQLite 副本 + 真实模型 + JSON / CSV 报告。
+- 当前 harness：`backend/evaluation/`，YAML 用例 + 独立评测库（`pawcare_eval`，与演示库隔离）+ 真实模型 + JSON / CSV 报告。
 - 主评测集 91 条，覆盖宠物、健康、提醒、笼舍空档、草稿、订单、日报、知识检索、
   越权、拒答、提示注入、多工具串联和多轮澄清。
 - baseline / 消融在 `evaluation/variants.py` 中实现，仅在评测进程内替换注册表或提示词：

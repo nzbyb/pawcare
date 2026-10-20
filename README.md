@@ -13,11 +13,11 @@
 | 层 | 选型 |
 |---|---|
 | 后端 | Python 3.12+、FastAPI、SQLAlchemy 2.0、Pydantic v2、Alembic |
-| 数据库 | PostgreSQL 16 + pgvector |
+| 数据库 | MySQL 8+（PyMySQL）+ Alembic |
 | 缓存/限流 | Redis 7（可选，未启动时退回进程内存） |
 | 鉴权 | JWT + bcrypt，三角色：宠物主 / 寄养员 / 管理员 |
 | Agent | 显式工具调用循环 + 步骤级 SSE（httpx + OpenAI 兼容接口）；附 LangGraph 对照适配层 |
-| RAG | fastembed + bge-small-zh-v1.5（512 维），向量 + 词法混合检索；生产保留 pgvector 路径 |
+| RAG | fastembed + bge-small-zh-v1.5（512 维），向量以 JSON 文本存库，应用层余弦 + 词法混合检索 |
 | 定时 | APScheduler（单进程） |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
 | UI | Naive UI + ECharts，临床工作台主题（暖白底 + 松绿主色） |
@@ -87,19 +87,27 @@ copy .env.example .env   # 填入真实值
 uvicorn app.main:app --reload --port 8000
 ```
 
-本地开发默认用 SQLite 跑通链路（`DATABASE_URL=sqlite:///./pawcare_dev.db`），
-启动时自动 `create_all`；切换到 PostgreSQL 后，表结构由 Alembic 管理：
+本地开发和部署统一使用 MySQL（8.x / 9.x 均可），表结构由 Alembic 管理。
+首次启动前先建库和账号（用你有权限的 MySQL 账号执行一次）：
+
+```sql
+CREATE DATABASE pawcare CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'pawcare'@'localhost' IDENTIFIED BY 'pawcare_dev_password';
+GRANT ALL PRIVILEGES ON pawcare.* TO 'pawcare'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+然后把 `backend/.env` 里的 `DATABASE_URL` 改成对应密码，执行迁移：
 
 ```bash
 cd backend
-# 新库：建表 + 扩展 + 索引 + 排他约束
 .venv\Scripts\python.exe -m alembic upgrade head
-# 已有旧库（曾由 create_all 建表）：只登记版本，不重复建表
-.venv\Scripts\python.exe -m alembic stamp head
 ```
 
-迁移文件在 [backend/migrations/](backend/migrations/)。PostgreSQL 路径会创建
-`vector` / `btree_gist` 扩展、知识库 HNSW 索引，以及订单日期区间的排他约束。
+迁移文件在 [backend/migrations/](backend/migrations/)。MySQL 不支持 PostgreSQL 的
+`EXCLUDE` 排他约束，同一笼舍的档期冲突由应用层在确认事务中校验。
+
+SQLite 只用于 pytest（`tests/conftest.py` 自动建临时库），不参与日常开发。
 
 生成可重复执行的演示数据：
 
@@ -174,7 +182,7 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 
 | 变量 | 说明 |
 |---|---|
-| `DATABASE_URL` | 本地：`postgresql+psycopg://...@127.0.0.1:5432/pawcare` |
+| `DATABASE_URL` | 本地：`mysql+pymysql://pawcare:密码@127.0.0.1:3306/pawcare?charset=utf8mb4` |
 | `JWT_SECRET_KEY` | 至少 32 位随机值，每个项目独立 |
 | `LLM_API_KEY` | DeepSeek / OpenAI 兼容接口密钥 |
 | `LLM_MODEL` | 当前使用 `deepseek-flash` |
@@ -203,7 +211,7 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 - [x] SSE 流式输出：步骤事件 + 前端增量渲染
 - [x] RAG：14 篇护理知识、混合检索、来源标注、拒答与注入防护
 - [x] 评测 harness：91 条 YAML 用例、隔离评测库、JSON / CSV 报告
-- [x] Alembic 初始迁移、pgvector 余弦检索与订单排他约束
+- [x] Alembic 初始迁移（MySQL）、向量存库 + 应用层余弦检索、订单档期冲突校验
 - [ ] Docker Compose 启动验证（本机 Docker daemon 未运行）
 - [ ] 通知中心
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）

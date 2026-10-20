@@ -7,7 +7,7 @@
     .venv\\Scripts\\python.exe evaluation\\runner.py
 
 设计：
-- 复制一份开发库到 pawcare_eval.db，评测只改副本，不动演示数据。
+- 在开发库同实例上建一份独立的评测库（`pawcare_eval`），评测只写副本，不动演示数据。
 - 每个用例走真实 HTTP API 和真实模型，结果按工具选择 / 参数 / 内容 / 草稿评分。
 - 工具参数从 AgentToolCall trace 读取，不依赖模型自述。
 - 默认输出 JSON + CSV 报告，便于论文阶段做对比和消融。
@@ -20,7 +20,7 @@ import csv
 import json
 import math
 import os
-import sqlite3
+import shutil
 import sys
 import time
 from collections import defaultdict
@@ -28,6 +28,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+
+from sqlalchemy import create_engine, make_url, text
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -39,6 +41,7 @@ from evaluation.variants import VARIANTS, apply_variant, describe
 
 DEV_DB = BACKEND_DIR / "pawcare_dev.db"
 EVAL_DB = BACKEND_DIR / "pawcare_eval.db"
+EVAL_DB_SUFFIX = "_eval"
 
 CREDENTIALS = {
     "owner": ("owner", "Owner12345"),
@@ -95,28 +98,88 @@ class CaseResult:
         return asdict(self)
 
 
-def prepare_database(keep_db: bool) -> bool:
-    """准备评测库，返回是否需要重新 seed。"""
-    if EVAL_DB.exists() and not keep_db:
-        EVAL_DB.unlink()
-
-    if not EVAL_DB.exists():
-        if DEV_DB.exists():
-            source = sqlite3.connect(DEV_DB)
-            target = sqlite3.connect(EVAL_DB)
-            try:
-                source.backup(target)
-            finally:
-                source.close()
-                target.close()
-            return False
-        return True
-    return False
+def _read_dev_database_url() -> str:
+    """读取开发库连接串：环境变量优先，其次 backend/.env。"""
+    value = os.environ.get("DATABASE_URL")
+    if value:
+        return value
+    env_file = BACKEND_DIR / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, raw = line.split("=", 1)
+            if key.strip() == "DATABASE_URL":
+                return raw.strip().strip('"').strip("'")
+    raise SystemExit("没有找到 DATABASE_URL：请先配置 backend/.env")
 
 
-def clean_runtime_tables() -> None:
-    conn = sqlite3.connect(EVAL_DB)
+def _is_sqlite(url: str) -> bool:
+    return url.startswith("sqlite")
+
+
+def _eval_url(dev_url: str) -> str:
+    """把开发库换成同实例上的独立评测库。"""
+    url = make_url(dev_url)
+    if url.get_backend_name() == "sqlite":
+        return f"sqlite:///{EVAL_DB.as_posix()}"
+    return str(url.set(database=f"{url.database}{EVAL_DB_SUFFIX}"))
+
+
+def prepare_database(keep_db: bool, dev_url: str) -> tuple[str, bool]:
+    """准备评测库，返回 (评测库 URL, 是否需要重新 seed)。"""
+    eval_url = _eval_url(dev_url)
+
+    if _is_sqlite(eval_url):
+        if EVAL_DB.exists() and not keep_db:
+            EVAL_DB.unlink()
+        if not EVAL_DB.exists():
+            if DEV_DB.exists():
+                shutil.copyfile(DEV_DB, EVAL_DB)
+                return eval_url, False
+            return eval_url, True
+        return eval_url, False
+
+    # MySQL：DROP + CREATE 后建表并 seed，与演示库完全隔离。
+    url = make_url(eval_url)
+    name = url.database
+    server = create_engine(
+        url.set(database=None), isolation_level="AUTOCOMMIT", hide_parameters=True
+    )
     try:
+        with server.connect() as conn:
+            conn.execute(text(f"DROP DATABASE IF EXISTS `{name}`"))
+            conn.execute(
+                text(
+                    f"CREATE DATABASE `{name}` "
+                    "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                )
+            )
+    finally:
+        server.dispose()
+    return eval_url, True
+
+
+def drop_eval_database(eval_url: str) -> None:
+    """评测结束后删掉评测库（SQLite 删文件，MySQL 删 schema）。"""
+    if _is_sqlite(eval_url):
+        if EVAL_DB.exists():
+            EVAL_DB.unlink()
+        return
+    url = make_url(eval_url)
+    server = create_engine(
+        url.set(database=None), isolation_level="AUTOCOMMIT", hide_parameters=True
+    )
+    try:
+        with server.connect() as conn:
+            conn.execute(text(f"DROP DATABASE IF EXISTS `{url.database}`"))
+    finally:
+        server.dispose()
+
+
+def clean_runtime_tables(engine) -> None:
+    with engine.begin() as conn:
         for table in (
             "agent_tool_calls",
             "agent_messages",
@@ -124,12 +187,9 @@ def clean_runtime_tables() -> None:
             "boarding_drafts",
         ):
             try:
-                conn.execute(f"DELETE FROM {table}")
-            except sqlite3.OperationalError:
+                conn.execute(text(f"DELETE FROM {table}"))
+            except Exception:
                 pass
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def auth(token: str) -> dict[str, str]:
@@ -637,12 +697,12 @@ def main() -> int:
         print(f"开始评测 {len(cases)} 条用例，模型调用可能持续数分钟…")
 
     os.chdir(BACKEND_DIR)
-    os.environ["DATABASE_URL"] = f"sqlite:///{EVAL_DB.as_posix()}"
     os.environ["REDIS_URL"] = ""
     # 必须在导入 app.config 之前设置；settings 在模块导入时实例化。
     os.environ["AGENT_ENGINE"] = args.engine
 
-    needs_seed = prepare_database(args.keep_db)
+    eval_url, needs_seed = prepare_database(args.keep_db, _read_dev_database_url())
+    os.environ["DATABASE_URL"] = eval_url
 
     from app.config import settings
     from app.database import Base, SessionLocal, engine
@@ -658,7 +718,7 @@ def main() -> int:
 
         seed.main()
 
-    clean_runtime_tables()
+    clean_runtime_tables(engine)
     if not args.no_fixtures:
         ensure_knowledge_fixture(SessionLocal, KnowledgeChunk)
 
@@ -715,8 +775,8 @@ def main() -> int:
         print(f"报告：{json_path}")
         print(f"      {csv_path}")
 
-    if not args.keep_db and EVAL_DB.exists():
-        EVAL_DB.unlink()
+    if not args.keep_db:
+        drop_eval_database(eval_url)
 
     if args.strict and metrics["passed"] != metrics["total"]:
         return 1

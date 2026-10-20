@@ -1,7 +1,5 @@
 from uuid import uuid4
 
-from sqlalchemy.dialects import postgresql
-
 from app.models.knowledge import KnowledgeChunk
 from app.rag import retriever
 from tests.fakes import BrokenEmbedder, FakeEmbedder
@@ -112,13 +110,3 @@ def test_search_empty_query(db):
 
     assert result.mode == "empty"
     assert result.chunks == []
-
-
-def test_pgvector_statement_uses_cosine_distance_and_jsonb_filter():
-    stmt = retriever._pgvector_statement([0.1] * 512, "vaccine", 12)
-    sql = str(stmt.compile(dialect=postgresql.dialect()))
-
-    assert "<=>" in sql
-    assert "CAST(" in sql and "VECTOR(512)" in sql.upper()
-    assert "->>" in sql
-    assert "LIMIT" in sql

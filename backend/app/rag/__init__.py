@@ -1,7 +1,7 @@
 """护理知识库检索（RAG）。
 
-本地开发用 fastembed + SQLite 余弦相似度；
-生产环境保留同一套检索接口，后续可切换到 PostgreSQL + pgvector。
+向量以 JSON 文本存库（MySQL / SQLite 通用），
+检索在应用层计算余弦相似度并与中文词法覆盖率混合排序。
 """
 
 from app.rag.retriever import RetrievalResult, RetrievedChunk, search

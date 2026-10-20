@@ -326,8 +326,7 @@ def confirm_draft(
         db.commit()
         raise BusinessException(message="草稿已过期，请重新生成", code=409)
 
-    # 锁住笼舍行，把同一笼舍的确认请求串行化；
-    # PostgreSQL 下配合唯一/排他约束，SQLite 下由写事务保证。
+    # 锁住笼舍行，把同一笼舍的确认请求串行化（MySQL 行锁 + 写事务）；
     kennel = (
         db.query(Kennel)
         .filter(Kennel.id == draft.kennel_id)
