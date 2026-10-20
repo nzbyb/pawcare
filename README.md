@@ -94,6 +94,8 @@ uvicorn app.main:app --reload --port 8000
 CREATE DATABASE pawcare CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'pawcare'@'localhost' IDENTIFIED BY 'pawcare_dev_password';
 GRANT ALL PRIVILEGES ON pawcare.* TO 'pawcare'@'localhost';
+-- Agent 评测会在同实例上建/删独立评测库 pawcare_eval
+GRANT ALL PRIVILEGES ON `pawcare_eval`.* TO 'pawcare'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
