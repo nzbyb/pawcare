@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/logo.svg" width="72" height="72" alt="PawCare logo" />
+</p>
+
 # PawCare
 
 面向宠物寄养与健康管理场景的领域智能体。业务系统是底座，Agent 是主线，核心关注 **工具调用、写操作确认、权限隔离和可评测性**。
@@ -16,7 +20,7 @@
 | RAG | fastembed + bge-small-zh-v1.5（512 维），向量 + 词法混合检索；生产保留 pgvector 路径 |
 | 定时 | APScheduler（单进程） |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
-| UI | Naive UI + ECharts，自定义暖色主题 |
+| UI | Naive UI + ECharts，临床工作台主题（暖白底 + 松绿主色） |
 | 部署 | Docker Compose + Nginx |
 
 ## 2. 核心闭环

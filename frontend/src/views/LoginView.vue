@@ -11,7 +11,7 @@ import {
   useMessage,
 } from 'naive-ui'
 
-import AppIcon from '@/components/AppIcon.vue'
+import AppLogo from '@/components/AppLogo.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -100,11 +100,7 @@ async function handleRegister(): Promise<void> {
   <div class="login-page">
     <section class="brand-panel">
       <div class="brand-top">
-        <span class="logo"><AppIcon name="paw" :size="22" /></span>
-        <div>
-          <h1>PawCare</h1>
-          <p>宠物寄养与健康管理</p>
-        </div>
+        <AppLogo variant="inverse" :size="40" />
       </div>
 
       <div class="brand-copy">
@@ -132,7 +128,7 @@ async function handleRegister(): Promise<void> {
     <section class="form-panel">
       <div class="form-card">
         <div class="form-head">
-          <span class="form-logo"><AppIcon name="paw" :size="20" /></span>
+          <AppLogo class="form-logo" :size="36" :show-text="false" />
           <span class="form-kicker">PawCare</span>
           <h2>{{ activeTab === 'login' ? '登录账户' : '创建账户' }}</h2>
           <p>
@@ -255,31 +251,6 @@ async function handleRegister(): Promise<void> {
 .brand-top {
   display: flex;
   align-items: center;
-  gap: 11px;
-}
-
-.logo {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.brand-top h1 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.brand-top p {
-  margin: 2px 0 0;
-  color: rgba(242, 244, 239, 0.58);
-  font-size: 11.5px;
 }
 
 .brand-copy {
@@ -435,14 +406,8 @@ async function handleRegister(): Promise<void> {
   }
 
   .form-logo {
-    display: grid;
-    width: 38px;
-    height: 38px;
+    display: block;
     margin-bottom: 14px;
-    place-items: center;
-    border-radius: 7px;
-    background: var(--pc-primary);
-    color: #fff;
   }
 }
 </style>

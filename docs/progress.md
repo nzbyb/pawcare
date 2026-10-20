@@ -429,3 +429,10 @@
 1. 在浏览器里过一遍桌面和移动端页面，检查间距、选中态和长文本换行。
 2. 网络与 Docker 可用时执行 `docker compose up -d --build`，验证迁移、pgvector 检索和前端链路。
 3. 通知中心（可选）。
+
+### 统一 Logo
+
+- 新增 `frontend/src/components/AppLogo.vue` 与 `frontend/public/logo.svg`：
+  松绿圆角方块 + 白色几何爪印，爪印由四个倾斜胶囊和一块圆角脚垫组成。
+- 侧边栏、移动端顶栏、登录页、favicon 和 README 统一使用同一标识；
+  深色背景使用白底松绿爪印的反色版本。

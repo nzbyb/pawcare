@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="PawCare">
+  <title>PawCare</title>
+  <rect width="48" height="48" rx="11" fill="#2f5d50" />
+  <g fill="#ffffff">
+    <rect x="12" y="19.6" width="5.8" height="7.4" rx="2.9" transform="rotate(-27 14.9 23.3)" />
+    <rect x="18.2" y="14.6" width="5.8" height="7.8" rx="2.9" transform="rotate(-9 21.1 18.5)" />
+    <rect x="24" y="14.6" width="5.8" height="7.8" rx="2.9" transform="rotate(9 26.9 18.5)" />
+    <rect x="30.2" y="19.6" width="5.8" height="7.4" rx="2.9" transform="rotate(27 33.1 23.3)" />
+    <rect x="14.4" y="27" width="19.2" height="11.6" rx="5.8" />
+  </g>
+</svg>

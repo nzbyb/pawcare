@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDropdown } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
+import AppLogo from '@/components/AppLogo.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -54,12 +55,8 @@ function onUserSelect(key: string | number): void {
 <template>
   <div class="shell">
     <aside class="sidebar">
-      <router-link to="/" class="brand">
-        <span class="brand-mark"><AppIcon name="paw" :size="19" /></span>
-        <span class="brand-text">
-          <strong>PawCare</strong>
-          <small>寄养与健康管理</small>
-        </span>
+      <router-link to="/" class="brand" aria-label="PawCare 首页">
+        <AppLogo :size="34" />
       </router-link>
 
       <div class="nav-label">工作区</div>
@@ -114,9 +111,8 @@ function onUserSelect(key: string | number): void {
       </header>
 
       <header class="mobile-bar">
-        <router-link to="/" class="mobile-brand">
-          <AppIcon name="paw" :size="16" />
-          PawCare
+        <router-link to="/" class="mobile-brand" aria-label="PawCare 首页">
+          <AppLogo :size="26" :show-text="false" />
         </router-link>
         <nav class="mobile-nav">
           <router-link
@@ -158,36 +154,7 @@ function onUserSelect(key: string | number): void {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
   padding: 2px 6px 0;
-}
-
-.brand-mark {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 7px;
-  background: var(--pc-primary);
-  color: #fff;
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.brand-text strong {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.brand-text small {
-  margin-top: 2px;
-  color: var(--pc-ink-faint);
-  font-size: 11px;
 }
 
 .nav-label {
@@ -414,11 +381,6 @@ function onUserSelect(key: string | number): void {
   .mobile-brand {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    color: var(--pc-primary);
-    font-size: 14px;
-    font-weight: 700;
-    white-space: nowrap;
   }
 
   .mobile-nav {
