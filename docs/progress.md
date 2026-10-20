@@ -468,6 +468,12 @@
 
 - `pytest`：全量通过（测试仍走临时 SQLite）。
 - 迁移在全新 SQLite 上 `upgrade head` → 重复执行 → `downgrade base` 通过。
+- 本机 MySQL 9.7：`alembic upgrade head` 建表成功，`scripts/seed.py` 写入
+  3 只宠物 / 5 间笼舍 / 3 笔订单 / 14 篇知识；登录、宠物列表、订单列表接口均返回 200。
+- 检索：14 篇知识全部生成 512 维向量并以 JSON 存入 MySQL，混合检索命中正常。
+- 评测：单条 `pets-001` 端到端通过（2.6s、3,850 tokens），评测库 `pawcare_eval` 自动创建并删除。
+- 修复评审时发现的问题：`str(URL)` 会把密码替换成 `***`，评测库连接报 1045；
+  改为 `render_as_string(hide_password=False)`，并以空库名连接实例执行 `CREATE/DROP DATABASE`。
 
 ### 下一步
 
