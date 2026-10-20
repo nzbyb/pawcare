@@ -8,7 +8,7 @@ QQ / 163 邮箱用 SMTP 授权码（不是登录密码）：
 import logging
 import smtplib
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 
 from app.common.exceptions import BusinessException
 from app.config import settings
@@ -28,6 +28,9 @@ def send_verification_code(to: str, code: str) -> None:
         ("PawCare", settings.SMTP_FROM or settings.SMTP_USER)
     )
     message["To"] = to
+    # 缺少 Date 时部分邮件系统会把时间显示成 1970-01-01。
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = make_msgid(domain="pawcare.local")
     message.set_content(
         f"你的验证码是 {code}，{minutes} 分钟内有效。\n\n"
         "如果这不是你本人的操作，请忽略这封邮件。\n"
