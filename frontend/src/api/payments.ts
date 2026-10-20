@@ -23,8 +23,14 @@ export function createPayment(orderId: number): Promise<Payment> {
   return request.post<Payment>('/payments', { order_id: orderId })
 }
 
-export function getPayment(paymentNo: string): Promise<Payment> {
-  return request.get<Payment>(`/payments/${encodeURIComponent(paymentNo)}`)
+export function getPayment(
+  paymentNo: string,
+  silent = false,
+): Promise<Payment> {
+  return request.get<Payment>(`/payments/${encodeURIComponent(paymentNo)}`, {
+    // 收银台轮询属于后台请求，失败交给页面处理，不弹全局错误提示。
+    silent,
+  })
 }
 
 export function getMockPayment(

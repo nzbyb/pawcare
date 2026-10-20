@@ -9,6 +9,11 @@ interface ErrorBody {
   detail?: string
 }
 
+/** 请求配置扩展：silent 用于后台轮询，失败时不弹全局提示。 */
+export interface RequestOptions extends AxiosRequestConfig {
+  silent?: boolean
+}
+
 const { message } = createDiscreteApi(['message'])
 
 const http = axios.create({
@@ -30,8 +35,14 @@ http.interceptors.response.use(
     if (body && typeof body.code === 'number') {
       if (body.code !== 200) {
         if (body.code === 401) handleUnauthorized()
-        message.error(body.message || '请求失败')
-        return Promise.reject(new Error(body.message || '请求失败'))
+        const text = body.message || '请求失败'
+        if (!(response.config as RequestOptions).silent) {
+          message.error(text)
+        }
+        // 带上业务码，调用方需要区分 403 / 404 这类“再试也没用”的错误。
+        const failure = new Error(text) as Error & { code?: number }
+        failure.code = body.code
+        return Promise.reject(failure)
       }
       return body.data
     }
@@ -45,7 +56,9 @@ http.interceptors.response.use(
     if (status === 401) {
       handleUnauthorized()
     }
-    message.error(status === 429 ? '操作太频繁，请稍后再试' : text)
+    if (!(error.config as RequestOptions | undefined)?.silent) {
+      message.error(status === 429 ? '操作太频繁，请稍后再试' : text)
+    }
     return Promise.reject(error)
   },
 )
@@ -61,16 +74,16 @@ function handleUnauthorized(): void {
 }
 
 export const request = {
-  get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  get<T>(url: string, config?: RequestOptions): Promise<T> {
     return http.get(url, config) as unknown as Promise<T>
   },
-  post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  post<T>(url: string, data?: unknown, config?: RequestOptions): Promise<T> {
     return http.post(url, data, config) as unknown as Promise<T>
   },
-  put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  put<T>(url: string, data?: unknown, config?: RequestOptions): Promise<T> {
     return http.put(url, data, config) as unknown as Promise<T>
   },
-  delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  delete<T>(url: string, config?: RequestOptions): Promise<T> {
     return http.delete(url, config) as unknown as Promise<T>
   },
 }

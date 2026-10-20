@@ -37,6 +37,13 @@ const remaining = ref(0)
 
 let pollTimer: number | null = null
 let tickTimer: number | null = null
+// 组件卸载或弹窗关闭后，迟到的 createPayment 结果不能再启动轮询。
+let disposed = false
+let loadSeq = 0
+
+function isCurrent(seq: number): boolean {
+  return !disposed && seq === loadSeq && props.show
+}
 
 const token = computed(() => {
   const content = payment.value?.qr_content
@@ -87,35 +94,52 @@ function tick(): void {
 
 async function loadPayment(): Promise<void> {
   if (!props.order) return
+  const seq = ++loadSeq
   stopTimers()
   loading.value = true
   errorText.value = ''
   try {
-    payment.value = await createPayment(props.order.id)
+    const created = await createPayment(props.order.id)
+    if (!isCurrent(seq)) return
+    payment.value = created
     tick()
     if (isActive.value) {
       pollTimer = window.setInterval(poll, 2500)
       tickTimer = window.setInterval(tick, 1000)
     }
   } catch {
-    errorText.value = '支付单创建失败，请稍后重试'
+    if (isCurrent(seq)) errorText.value = '支付单创建失败，请稍后重试'
   } finally {
-    loading.value = false
+    if (isCurrent(seq)) loading.value = false
   }
 }
 
 async function poll(): Promise<void> {
+  // 弹窗已关闭或页面已离开时立刻停表，避免定时器在后台一直跑。
+  if (disposed || !props.show) {
+    stopTimers()
+    return
+  }
   if (!payment.value) return
   try {
-    const latest = await getPayment(payment.value.payment_no)
+    const latest = await getPayment(payment.value.payment_no, true)
+    if (disposed || !props.show) {
+      stopTimers()
+      return
+    }
     payment.value = latest
     if (latest.status === 'paid') {
       handlePaid()
     } else if (latest.status === 'closed') {
       stopTimers()
     }
-  } catch {
-    // 网络抖动时继续轮询，不打断用户。
+  } catch (error) {
+    // 403/404 说明支付单已不属于当前账号或已不存在，继续轮询只会反复报错。
+    const code = (error as { code?: number }).code
+    if (code === 403 || code === 404) {
+      stopTimers()
+      errorText.value = '无权查看该支付单'
+    }
   }
 }
 
@@ -123,7 +147,9 @@ function handlePaid(): void {
   stopTimers()
   message.success('支付成功，订单已标记为已支付')
   emit('paid')
-  window.setTimeout(() => emit('update:show', false), 1200)
+  window.setTimeout(() => {
+    if (!disposed) emit('update:show', false)
+  }, 1200)
 }
 
 async function handleMockPay(): Promise<void> {
@@ -161,6 +187,8 @@ watch(
       payment.value = null
       loadPayment()
     } else {
+      // 让仍在途的 createPayment 结果失效，再停表。
+      loadSeq += 1
       stopTimers()
     }
   },
@@ -173,7 +201,11 @@ watch(
   },
 )
 
-onBeforeUnmount(stopTimers)
+onBeforeUnmount(() => {
+  disposed = true
+  loadSeq += 1
+  stopTimers()
+})
 </script>
 
 <template>
