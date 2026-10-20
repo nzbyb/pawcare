@@ -480,3 +480,43 @@
 1. 本机建 `pawcare` 库和账号，`alembic upgrade head` + `scripts/seed.py`，启动后端冒烟。
 2. 网络与 Docker 可用时执行 `docker compose up -d --build` 验证容器链路。
 3. 通知中心（可选）。
+
+## 2026-10-20 · 第 11 天（续）· 注册验证与登录安全
+
+### 目标
+
+- 让登录页接近可上线产品：注册需要邮箱或手机号验证，支持找回密码和协议勾选。
+- 不引入付费短信依赖：手机走可插拔发送器，本地用日志输出验证码。
+
+### 完成内容
+
+- 模型：新增 `verification_codes`（channel / target / scene / code_hash /
+  expires_at / attempts / consumed_at / request_ip）；`users` 增加 `email`、
+  `email_verified_at`、`phone_verified_at`、`failed_login_count`、`locked_until`，
+  邮箱与手机号加唯一索引。迁移 `8521a822ba0b` 已在 MySQL 执行。
+- 验证码服务：6 位数字、HMAC-SHA256 存摘要、5 分钟有效、60 秒重发冷却、
+  每小时 5 条、最多试错 5 次、一次核销、签发新码即作废旧码。
+- 发信：`services/mailer.py` 用标准库 `smtplib` + `EmailMessage`，支持 SSL / STARTTLS；
+  `services/sms.py` 提供 `console` 发送器；未配置且非调试模式时返回 503。
+- 接口：`POST /api/auth/verification-code`、`POST /api/auth/password/reset`；
+  注册请求改为“邮箱或手机号二选一 + 验证码”。
+- 登录保护：连续 5 次密码错误锁定 15 分钟；登录成功清零；重置密码递增
+  `token_version` 并解除锁定。
+- 登录页：注册页增加验证方式切换、验证码倒计时、密码强度、协议勾选与协议弹窗；
+  登录页增加“忘记密码”弹窗和锁定提示；调试模式自动回填验证码。
+- 配置：`backend/.env.example` 增加 SMTP / 验证码策略说明；
+  `VERIFY_CODE_DEBUG=true` 只在本地 `.env` 开启。
+
+### 验证
+
+- `pytest`：76 条全部通过（新增 10 条验证码 / 锁定 / 找回密码用例）。
+- `npm run typecheck` 与 `npm run build` 通过。
+- 本机 MySQL 冒烟：邮箱验证码 → 注册 → 登录 → 找回密码 → 新密码登录全部返回 200；
+  手机号验证码经 `console` 发送器返回 `debug_code`。冒烟数据已清理。
+
+### 下一步
+
+1. 拿到 QQ / 163 授权码后填入 `.env`，关闭 `VERIFY_CODE_DEBUG` 验证真实发信。
+2. 需要真实短信时接入阿里云 / 腾讯云，并补充签名与模板配置。
+3. 网络与 Docker 可用时执行 `docker compose up -d --build` 验证容器链路。
+

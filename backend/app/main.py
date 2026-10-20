@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -15,9 +16,11 @@ from app.common.exceptions import (
     rate_limit_exception_handler,
     validation_exception_handler,
 )
-from app.config import ALLOWED_ORIGINS, UPLOAD_PATH
+from app.config import ALLOWED_ORIGINS, UPLOAD_PATH, settings
 from app.database import Base, engine
 from app.limiter import limiter
+
+logger = logging.getLogger(__name__)
 
 # 必须导入所有模型，Base.metadata 才是完整的。
 from app import models  # noqa: F401
@@ -30,6 +33,10 @@ async def lifespan(app: FastAPI):
         Base.metadata.create_all(bind=engine)
     # MySQL 的表结构统一由 Alembic 管理：
     # 本地 `python -m alembic upgrade head`，容器由 entrypoint 自动执行。
+    if settings.VERIFY_CODE_DEBUG:
+        logger.warning(
+            "VERIFY_CODE_DEBUG 已开启：验证码会随接口响应返回，仅限本地调试，部署时必须关闭。"
+        )
     yield
 
 

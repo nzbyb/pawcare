@@ -13,6 +13,8 @@ os.environ["JWT_SECRET_KEY"] = "test_secret_key_" + "x" * 40
 os.environ["REDIS_URL"] = ""
 os.environ["LLM_API_KEY"] = "test-key"
 os.environ["UPLOAD_DIR"] = str(Path(tempfile.gettempdir()) / "pawcare_test_uploads")
+# 测试不连真实 SMTP：验证码随响应返回。
+os.environ["VERIFY_CODE_DEBUG"] = "true"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -65,9 +67,44 @@ def login(client, username: str, password: str = "Passw0rd!") -> str:
     return body["data"]["token"]
 
 
+def request_code(
+    client,
+    channel: str = "email",
+    target: str | None = None,
+    scene: str = "register",
+    username: str | None = None,
+) -> str:
+    target = target or f"{username or unique_username('user')}@example.com"
+    resp = client.post(
+        "/api/auth/verification-code",
+        json={"channel": channel, "target": target, "scene": scene},
+    )
+    body = resp.json()
+    assert body["code"] == 200, resp.text
+    return body["data"]["debug_code"]
+
+
+def register_payload(
+    client,
+    username: str,
+    password: str = "Passw0rd!",
+    channel: str = "email",
+    target: str | None = None,
+) -> dict:
+    target = target or (
+        f"{username}@example.com" if channel == "email" else "13800138000"
+    )
+    return {
+        "username": username,
+        "password": password,
+        channel: target,
+        "code": request_code(client, channel, target),
+    }
+
+
 def register_and_login(client, username: str, password: str = "Passw0rd!") -> str:
     register_resp = client.post(
-        "/api/auth/register", json={"username": username, "password": password}
+        "/api/auth/register", json=register_payload(client, username, password)
     )
     assert register_resp.json()["code"] == 200, register_resp.text
     return login(client, username, password)

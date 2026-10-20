@@ -12,6 +12,7 @@ from app.models.knowledge import KnowledgeChunk
 from app.models.pet import Attachment, Pet, WeightRecord
 from app.models.reminder import Notification, Reminder
 from app.models.user import User
+from app.models.verification import VerificationCode
 
 __all__ = [
     "AgentConversation",
@@ -30,5 +31,6 @@ __all__ = [
     "Pet",
     "Reminder",
     "User",
+    "VerificationCode",
     "WeightRecord",
 ]

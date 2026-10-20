@@ -24,6 +24,26 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "deepseek-flash"
     LLM_BASE_URL: str = "https://api.deepseek.com"
 
+    # ---------- 邮箱 / 短信验证码 ----------
+    # QQ 邮箱：smtp.qq.com / 465 / SSL；SMTP_PASSWORD 填授权码，不是登录密码。
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_USE_SSL: bool = True
+    SMTP_TIMEOUT_SECONDS: int = 10
+    # 短信：console 只写后端日志，不会真发；接入阿里云时在 services/sms.py 扩展。
+    SMS_PROVIDER: str = "console"
+    VERIFY_CODE_TTL_SECONDS: int = 300
+    VERIFY_CODE_RESEND_SECONDS: int = 60
+    VERIFY_CODE_HOURLY_LIMIT: int = 5
+    VERIFY_CODE_MAX_ATTEMPTS: int = 5
+    # 仅本地调试：未配置 SMTP 时把验证码写日志并随响应返回。部署必须为 false。
+    VERIFY_CODE_DEBUG: bool = False
+    LOGIN_MAX_FAILURES: int = 5
+    LOGIN_LOCK_MINUTES: int = 15
+
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     # 留空 = 进程内存限流；Docker 部署时注入 redis://redis:6379/0

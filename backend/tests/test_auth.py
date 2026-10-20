@@ -1,4 +1,8 @@
-from tests.conftest import register_and_login, unique_username
+from tests.conftest import (
+    register_and_login,
+    register_payload,
+    unique_username,
+)
 
 
 def test_register_login_and_me(client):
@@ -10,15 +14,15 @@ def test_register_login_and_me(client):
     assert body["code"] == 200
     assert body["data"]["username"] == username
     assert body["data"]["role"] == "pet_owner"
+    assert body["data"]["email"] == f"{username}@example.com"
 
 
 def test_duplicate_username_rejected(client):
     username = unique_username("dup")
     register_and_login(client, username)
 
-    resp = client.post(
-        "/api/auth/register", json={"username": username, "password": "Passw0rd!"}
-    )
+    payload = register_payload(client, username, target=f"{username}2@example.com")
+    resp = client.post("/api/auth/register", json=payload)
     body = resp.json()
     assert body["code"] == 400
     assert "已存在" in body["message"]

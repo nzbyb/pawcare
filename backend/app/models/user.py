@@ -1,4 +1,6 @@
-from sqlalchemy import String
+from datetime import datetime
+
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -22,7 +24,18 @@ class User(Base):
         index=True,
         comment="角色: pet_owner / boarding_staff / admin",
     )
-    phone: Mapped[str | None] = mapped_column(String(30), comment="手机号")
+    email: Mapped[str | None] = mapped_column(
+        String(120), unique=True, index=True, comment="邮箱"
+    )
+    phone: Mapped[str | None] = mapped_column(
+        String(30), unique=True, index=True, comment="手机号"
+    )
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, comment="邮箱验证时间"
+    )
+    phone_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, comment="手机号验证时间"
+    )
     status: Mapped[int] = mapped_column(
         default=1, nullable=False, comment="1-正常, 0-禁用"
     )
@@ -31,4 +44,14 @@ class User(Base):
         server_default="0",
         nullable=False,
         comment="令牌版本号，改密码时+1",
+    )
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False,
+        comment="连续登录失败次数",
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime, comment="锁定截止时间"
     )

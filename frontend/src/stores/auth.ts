@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { getMe, login as loginApi, register as registerApi } from '@/api/auth'
+import type { RegisterPayload } from '@/api/auth'
 import type { User } from '@/types'
 import {
   clearToken,
@@ -29,12 +30,7 @@ export const useAuthStore = defineStore('auth', () => {
     setStoredUser(result.user)
   }
 
-  async function register(payload: {
-    username: string
-    password: string
-    nickname?: string
-    phone?: string
-  }): Promise<void> {
+  async function register(payload: RegisterPayload): Promise<void> {
     await registerApi(payload)
     await login(payload.username, payload.password)
   }

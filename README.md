@@ -194,12 +194,23 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 | `RAG_ENABLED` | 是否启用知识库检索，默认 `true` |
 | `RAG_EMBEDDING_MODEL` | 默认 `BAAI/bge-small-zh-v1.5` |
 | `RAG_TOP_K` / `RAG_MIN_SCORE` | 返回片段数与混合检索阈值 |
+| `SMTP_HOST` / `SMTP_PORT` | 邮箱验证码 SMTP，QQ 为 `smtp.qq.com:465`，163 为 `smtp.163.com:465` |
+| `SMTP_USER` / `SMTP_PASSWORD` | 发信邮箱与客户端授权码（不是登录密码） |
+| `SMS_PROVIDER` | 手机验证码发送器，`console` 只写日志；接入短信服务后再扩展 |
+| `VERIFY_CODE_DEBUG` | `true` 时接口直接返回 `debug_code`，仅限本地；部署必须为 `false` |
+| `LOGIN_MAX_FAILURES` / `LOGIN_LOCK_MINUTES` | 连续密码错误锁定阈值，默认 5 次 / 15 分钟 |
+
+注册与找回密码支持邮箱或手机号验证码：6 位数字、5 分钟有效、60 秒重发冷却、
+每小时最多 5 次、最多试错 5 次、一次核销，旧码在签发新码时立即作废。
+数据库只保存 HMAC-SHA256 摘要。本地未配置 SMTP 时，验证码打印到后端日志
+并从接口返回，方便联调；上线前关闭 `VERIFY_CODE_DEBUG` 并填写 SMTP 授权码。
 
 ## 7. 当前进度
 
 - [x] 项目骨架、统一响应、异常处理
 - [x] 用户 / 宠物 / 健康档案模型
 - [x] 注册登录、JWT 鉴权、角色守卫
+- [x] 邮箱 / 手机验证码注册、找回密码、连续失败锁定
 - [x] 宠物档案、体重、健康记录、提醒同步接口
 - [x] 后端 pytest 用例（认证 / 权限 / 档案 / 提醒）
 - [x] 前端骨架：登录、工作台、宠物列表、详情、Agent 占位页

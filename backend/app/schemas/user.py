@@ -18,6 +18,7 @@ class UserResponse(BaseModel):
     username: str
     nickname: str
     role: str
+    email: str | None = None
     phone: str | None = None
     status: int
     create_time: datetime | None = None
