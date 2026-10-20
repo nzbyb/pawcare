@@ -199,11 +199,18 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 | `SMS_PROVIDER` | 手机验证码发送器，`console` 只写日志；接入短信服务后再扩展 |
 | `VERIFY_CODE_DEBUG` | `true` 时接口直接返回 `debug_code`，仅限本地；部署必须为 `false` |
 | `LOGIN_MAX_FAILURES` / `LOGIN_LOCK_MINUTES` | 连续密码错误锁定阈值，默认 5 次 / 15 分钟 |
+| `PAYMENT_TTL_MINUTES` | 支付单有效期，默认 15 分钟 |
+| `PAYMENT_MOCK_BASE_URL` | 二维码里写的前端地址，默认 `http://localhost:5173` |
 
 注册与找回密码支持邮箱或手机号验证码：6 位数字、5 分钟有效、60 秒重发冷却、
 每小时最多 5 次、最多试错 5 次、一次核销，旧码在签发新码时立即作废。
 数据库只保存 HMAC-SHA256 摘要。本地未配置 SMTP 时，验证码打印到后端日志
 并从接口返回，方便联调；上线前关闭 `VERIFY_CODE_DEBUG` 并填写 SMTP 授权码。
+
+寄养订单支持在线支付，但当前只实现**模拟收银台**：二维码指向本地支付页，
+点「模拟支付」后走与真实渠道相同的回调、幂等和订单状态联动，不产生真实资金。
+微信支付 / 支付宝 / 银行卡收单都需要商户资质，个人账号无法开通；接入真实渠道时
+新增 provider 并补验签、金额比对与对账即可，状态机不用改。
 
 ## 7. 当前进度
 
@@ -226,6 +233,7 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 - [x] 评测 harness：91 条 YAML 用例、隔离评测库、JSON / CSV 报告
 - [x] Alembic 初始迁移（MySQL）、向量存库 + 应用层余弦检索、订单档期冲突校验
 - [ ] Docker Compose 启动验证（本机 Docker daemon 未运行）
+- [x] 模拟支付收银台：二维码、扫码页、回调幂等、超时关单、订单支付状态
 - [ ] 通知中心
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
 - [x] LangGraph 对照适配层（`AGENT_ENGINE` / 评测 `--engine`，生产默认显式循环）

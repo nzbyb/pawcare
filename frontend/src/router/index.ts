@@ -56,6 +56,12 @@ const router = createRouter({
       ],
     },
     {
+      path: '/pay/:paymentNo',
+      name: 'pay',
+      component: () => import('@/views/PayView.vue'),
+      meta: { public: true, title: '支付' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },

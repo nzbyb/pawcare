@@ -72,6 +72,18 @@ class BoardingOrder(Base):
     total_amount: Mapped[float] = mapped_column(
         Numeric(8, 2, asdecimal=False), nullable=False, default=0
     )
+    # 支付状态由支付回调维护，列表页不必再关联 payment_orders。
+    payment_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="unpaid",
+        server_default="unpaid",
+        index=True,
+        comment="unpaid / paid / refunded",
+    )
+    paid_amount: Mapped[float] = mapped_column(
+        Numeric(10, 2, asdecimal=False), nullable=False, default=0, server_default="0"
+    )
     note: Mapped[str | None] = mapped_column(Text)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime)

@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     LOGIN_MAX_FAILURES: int = 5
     LOGIN_LOCK_MINUTES: int = 15
 
+    # ---------- 支付 ----------
+    # 当前只有 mock 渠道：二维码指向本地模拟收银台，不产生真实资金。
+    PAYMENT_TTL_MINUTES: int = 15
+    # 二维码里写的前端地址；换域名时同步修改，否则扫码打不开。
+    PAYMENT_MOCK_BASE_URL: str = "http://localhost:5173"
+
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     # 留空 = 进程内存限流；Docker 部署时注入 redis://redis:6379/0

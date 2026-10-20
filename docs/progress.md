@@ -520,3 +520,43 @@
 2. 需要真实短信时接入阿里云 / 腾讯云，并补充签名与模板配置。
 3. 网络与 Docker 可用时执行 `docker compose up -d --build` 验证容器链路。
 
+## 2026-10-20 · 第 11 天（续 2）· 模拟支付收银台
+
+### 目标
+
+- 给寄养订单补上「待支付 / 已支付」状态和扫码支付流程。
+- 不申请商户资质、不接真实资金，但把回调、幂等、超时和状态机做完整。
+
+### 完成内容
+
+- 模型：新增 `payment_orders`（支付单号 / 订单 / 金额 / 状态 / 二维码 token /
+  有效期 / 交易号 / 回调原文）；`boarding_orders` 增加冗余字段
+  `payment_status`、`paid_amount`。迁移 `6974e27e2fdc` 已在 MySQL 执行。
+- 服务：`payment_service` 实现 `created → paying → paid / closed` 状态机；
+  未过期支付单复用，过期惰性关单，重复回调幂等，已支付订单拒绝再次发起。
+- 接口：`POST /api/payments`、`GET /api/payments/{payment_no}`、
+  公开的扫码页查询与模拟回调 `GET/POST /api/payments/mock/...`。
+- 安全：二维码内容是前端支付页地址 + 一次性 token，回调用 `compare_digest`
+  校验；公开查询不返回 owner_id 和交易号。
+- 前端：订单卡片增加支付标签与「去支付」；收银台弹窗展示金额、二维码、
+  倒计时和轮询；新增公开支付页 `/pay/:paymentNo`，支持模拟支付。
+- 演示数据：seed 把历史已完成订单标记为已支付并写入一条支付单，
+  新库里同时能看到「已支付」和「待支付」两种状态。
+- 文档：README、architecture 增加支付说明与配置项。
+
+### 验证
+
+- `pytest`：82 条全部通过（新增 6 条支付用例：复用、权限、扫码回调、
+  重复回调、过期关单、取消订单不可支付）。
+- 本机 MySQL 冒烟：登录 → 创建支付单 → 扫码页查询（`paying`）→ 回调
+  （`paid`）→ 订单 `payment_status=paid`、`paid_amount=204`。
+- `npm run typecheck`、`npm run build` 通过。
+- seed 在临时 SQLite 上完整跑通，可重复执行。
+
+### 下一步
+
+1. 需要真实收款时申请支付宝沙箱，新增 provider 并补验签、金额比对与退款。
+2. 拿到 QQ / 163 授权码后关闭 `VERIFY_CODE_DEBUG` 验证真实发信。
+3. 网络与 Docker 可用时执行 `docker compose up -d --build` 验证容器链路。
+
+

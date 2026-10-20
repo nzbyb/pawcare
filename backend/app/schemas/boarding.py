@@ -55,6 +55,8 @@ class BoardingOrderResponse(BaseModel):
     daily_price: float
     deposit: float
     total_amount: float
+    payment_status: str = "unpaid"
+    paid_amount: float = 0
     note: str | None = None
     confirmed_at: datetime | None = None
     checked_in_at: datetime | None = None

@@ -22,6 +22,7 @@ from app.models.boarding import (
     Kennel,
 )
 from app.models.knowledge import KnowledgeChunk
+from app.models.payment import PaymentOrder
 from app.models.pet import Pet, WeightRecord
 from app.models.user import User
 from app.rag.retriever import KNOWLEDGE_CATEGORIES
@@ -477,6 +478,8 @@ def main() -> None:
                 daily_price=88,
                 deposit=105.6,
                 total_amount=352,
+                payment_status="paid",
+                paid_amount=352,
                 note="seed-demo",
                 confirmed_at=datetime.now() - timedelta(days=26),
                 checked_in_at=datetime.now() - timedelta(days=24),
@@ -512,6 +515,22 @@ def main() -> None:
             )
             db.add_all([completed, pending, confirmed])
             db.flush()
+            db.add(
+                PaymentOrder(
+                    payment_no="PAY-DEMO-COMPLETED",
+                    order_id=completed.id,
+                    owner_id=owner.id,
+                    channel="mock",
+                    amount=352,
+                    status="paid",
+                    qr_token="seed-demo-token-completed",
+                    qr_content="http://localhost:5173/pay/PAY-DEMO-COMPLETED",
+                    expires_at=datetime.now() - timedelta(days=20),
+                    paid_at=datetime.now() - timedelta(days=24),
+                    transaction_id="MOCK-PAY-DEMO-COMPLETED",
+                    notify_payload={"channel": "mock", "amount": 352},
+                )
+            )
             db.add_all(
                 [
                     BoardingDailyReport(

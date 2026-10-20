@@ -14,7 +14,11 @@ os.environ["REDIS_URL"] = ""
 os.environ["LLM_API_KEY"] = "test-key"
 os.environ["UPLOAD_DIR"] = str(Path(tempfile.gettempdir()) / "pawcare_test_uploads")
 # 测试不连真实 SMTP：验证码随响应返回。
+# 这里显式清空 SMTP，避免本机 .env 配了真实邮箱后测试真的发信。
 os.environ["VERIFY_CODE_DEBUG"] = "true"
+os.environ["SMTP_HOST"] = ""
+os.environ["SMTP_USER"] = ""
+os.environ["SMTP_PASSWORD"] = ""
 
 import pytest
 from fastapi.testclient import TestClient

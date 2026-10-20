@@ -118,6 +118,8 @@ export interface BoardingOrder {
   daily_price: number
   deposit: number
   total_amount: number
+  payment_status: 'unpaid' | 'paid' | 'refunded'
+  paid_amount: number
   note?: string | null
   confirmed_at?: string | null
   checked_in_at?: string | null

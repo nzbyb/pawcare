@@ -13,6 +13,7 @@ import {
 } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
+import PaymentModal from '@/components/PaymentModal.vue'
 import {
   cancelDraft as cancelDraftApi,
   cancelOrder as cancelOrderApi,
@@ -67,6 +68,9 @@ const note = ref('')
 const draft = ref<BoardingDraft | null>(null)
 const countdown = ref(0)
 const statusFilter = ref('all')
+
+const payVisible = ref(false)
+const payOrder = ref<BoardingOrder | null>(null)
 
 let timer: number | undefined
 
@@ -136,6 +140,21 @@ const statusMap: Record<string, { label: string; type: TagType }> = {
 
 function statusMeta(status: string): { label: string; type: TagType } {
   return statusMap[status] ?? { label: status, type: 'default' }
+}
+
+function canPay(order: BoardingOrder): boolean {
+  if (order.payment_status === 'paid') return false
+  if (order.status !== 'pending' && order.status !== 'confirmed') return false
+  return isOwner.value || auth.user?.role === 'admin'
+}
+
+function openPayment(order: BoardingOrder): void {
+  payOrder.value = order
+  payVisible.value = true
+}
+
+async function onPaid(): Promise<void> {
+  await load()
 }
 
 const sizeLabels: Record<string, string> = {
@@ -609,6 +628,22 @@ onBeforeUnmount(stopCountdown)
                 <n-tag size="small" :type="statusMeta(order.status).type">
                   {{ statusMeta(order.status).label }}
                 </n-tag>
+                <n-tag
+                  v-if="order.payment_status === 'paid'"
+                  size="small"
+                  type="success"
+                >
+                  已支付
+                </n-tag>
+                <n-tag
+                  v-else-if="order.payment_status === 'refunded'"
+                  size="small"
+                >
+                  已退款
+                </n-tag>
+                <n-tag v-else-if="canPay(order)" size="small" type="warning">
+                  待支付
+                </n-tag>
               </div>
               <p class="order-meta">
                 {{ order.start_date }} → {{ order.end_date }}
@@ -626,6 +661,15 @@ onBeforeUnmount(stopCountdown)
                 <small>定金 ¥{{ order.deposit }}</small>
               </div>
               <div class="order-actions">
+                <n-button
+                  v-if="canPay(order)"
+                  size="small"
+                  type="primary"
+                  secondary
+                  @click="openPayment(order)"
+                >
+                  去支付
+                </n-button>
                 <n-button size="small" quaternary @click="openReports(order)">
                   日报
                 </n-button>
@@ -677,6 +721,8 @@ onBeforeUnmount(stopCountdown)
         <n-empty v-else description="还没有寄养订单" />
       </n-spin>
     </section>
+
+    <payment-modal v-model:show="payVisible" :order="payOrder" @paid="onPaid" />
 
     <n-modal
       v-model:show="showReports"
