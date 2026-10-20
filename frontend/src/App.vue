@@ -11,30 +11,36 @@ import {
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
-    primaryColor: '#E8835A',
-    primaryColorHover: '#F09A75',
-    primaryColorPressed: '#D06F47',
-    primaryColorSuppl: '#E8835A',
-    infoColor: '#7C9A82',
-    successColor: '#5FA87A',
-    warningColor: '#E0A84A',
-    errorColor: '#D95D5D',
-    borderRadius: '12px',
+    primaryColor: '#2F5D50',
+    primaryColorHover: '#3A6E5F',
+    primaryColorPressed: '#264B41',
+    primaryColorSuppl: '#2F5D50',
+    infoColor: '#2F5D50',
+    successColor: '#2F6B4F',
+    warningColor: '#8A5A23',
+    errorColor: '#A8423B',
+    borderRadius: '8px',
+    borderRadiusSmall: '6px',
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+    fontSize: '14px',
   },
   Button: {
-    borderRadiusMedium: '10px',
+    borderRadiusMedium: '6px',
+    borderRadiusLarge: '6px',
     fontWeight: '600',
   },
   Card: {
-    borderRadius: '18px',
+    borderRadius: '8px',
   },
   Input: {
-    borderRadius: '10px',
+    borderRadius: '6px',
   },
   Tag: {
-    borderRadius: '999px',
+    borderRadius: '4px',
+  },
+  Tabs: {
+    tabFontWeightActive: '600',
   },
 }
 </script>

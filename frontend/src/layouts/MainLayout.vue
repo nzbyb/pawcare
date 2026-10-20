@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NAvatar, NButton, NDropdown } from 'naive-ui'
+import { NButton, NDropdown } from 'naive-ui'
 
+import AppIcon from '@/components/AppIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -10,10 +11,10 @@ const route = useRoute()
 const router = useRouter()
 
 const navItems = [
-  { key: 'dashboard', label: '工作台', short: '工作台', icon: '🏠', to: '/', match: ['dashboard'] },
-  { key: 'pets', label: '宠物档案', short: '宠物', icon: '🐾', to: '/pets', match: ['pets', 'pet-detail'] },
-  { key: 'boarding', label: '寄养预约', short: '寄养', icon: '🏡', to: '/boarding', match: ['boarding'] },
-  { key: 'agent', label: '智能助手', short: '助手', icon: '💬', to: '/agent', match: ['agent'] },
+  { key: 'dashboard', label: '工作台', short: '工作台', icon: 'home', to: '/', match: ['dashboard'] },
+  { key: 'pets', label: '宠物档案', short: '宠物', icon: 'paw', to: '/pets', match: ['pets', 'pet-detail'] },
+  { key: 'boarding', label: '寄养预约', short: '寄养', icon: 'calendar', to: '/boarding', match: ['boarding'] },
+  { key: 'agent', label: '智能助手', short: '助手', icon: 'chat', to: '/agent', match: ['agent'] },
 ]
 
 const roleLabels: Record<string, string> = {
@@ -24,6 +25,16 @@ const roleLabels: Record<string, string> = {
 
 const roleLabel = computed(() =>
   auth.user ? roleLabels[auth.user.role] ?? auth.user.role : '',
+)
+
+const currentTitle = computed(() => String(route.meta.title ?? '工作台'))
+
+const todayText = computed(() =>
+  new Intl.DateTimeFormat('zh-CN', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(new Date()),
 )
 
 const userOptions = [{ label: '退出登录', key: 'logout' }]
@@ -44,13 +55,14 @@ function onUserSelect(key: string | number): void {
   <div class="shell">
     <aside class="sidebar">
       <router-link to="/" class="brand">
-        <span class="brand-mark">🐾</span>
+        <span class="brand-mark"><AppIcon name="paw" :size="19" /></span>
         <span class="brand-text">
           <strong>PawCare</strong>
-          <small>宠物寄养与健康管理</small>
+          <small>寄养与健康管理</small>
         </span>
       </router-link>
 
+      <div class="nav-label">工作区</div>
       <nav class="nav">
         <router-link
           v-for="item in navItems"
@@ -59,33 +71,53 @@ function onUserSelect(key: string | number): void {
           class="nav-item"
           :class="{ active: isActive(item) }"
         >
-          <span class="nav-icon">{{ item.icon }}</span>
+          <AppIcon :name="item.icon" :size="16" />
           <span>{{ item.label }}</span>
         </router-link>
       </nav>
 
-      <div class="sidebar-card">
-        <span class="sidebar-card-badge">AI</span>
-        <strong>PawCare 助手</strong>
-        <p>寄养预约、健康记录、疫苗提醒，都可以用一句话完成。</p>
-        <n-button size="small" block @click="router.push('/agent')">去试试</n-button>
-      </div>
-
-      <div class="user-box">
-        <n-avatar round :size="38" color="#E8835A">{{ auth.initial }}</n-avatar>
-        <div class="user-meta">
-          <strong>{{ auth.displayName }}</strong>
-          <span>{{ roleLabel }}</span>
+      <div class="sidebar-foot">
+        <div class="sidebar-note">
+          <span class="sidebar-note-label">当前环境</span>
+          <span class="sidebar-note-value"><span class="status-dot" /> 开发演示</span>
         </div>
-        <n-dropdown :options="userOptions" trigger="click" @select="onUserSelect">
-          <n-button quaternary circle size="small" aria-label="账户菜单">⋯</n-button>
-        </n-dropdown>
+
+        <div class="user-box">
+          <span class="user-avatar">{{ auth.initial }}</span>
+          <div class="user-meta">
+            <strong>{{ auth.displayName }}</strong>
+            <span>{{ roleLabel }}</span>
+          </div>
+          <n-dropdown :options="userOptions" trigger="click" @select="onUserSelect">
+            <n-button quaternary circle size="small" aria-label="账户菜单">
+              <AppIcon name="chevronDown" :size="15" />
+            </n-button>
+          </n-dropdown>
+        </div>
       </div>
     </aside>
 
     <main class="main">
+      <header class="topbar">
+        <div class="crumb">
+          <span class="crumb-root">PawCare</span>
+          <AppIcon name="chevronRight" :size="13" />
+          <span class="crumb-current">{{ currentTitle }}</span>
+        </div>
+        <div class="topbar-actions">
+          <span class="topbar-date">{{ todayText }}</span>
+          <button class="assistant-button" type="button" @click="router.push('/agent')">
+            <AppIcon name="chat" :size="15" />
+            打开助手
+          </button>
+        </div>
+      </header>
+
       <header class="mobile-bar">
-        <router-link to="/" class="mobile-brand">🐾 PawCare</router-link>
+        <router-link to="/" class="mobile-brand">
+          <AppIcon name="paw" :size="16" />
+          PawCare
+        </router-link>
         <nav class="mobile-nav">
           <router-link
             v-for="item in navItems"
@@ -116,31 +148,28 @@ function onUserSelect(key: string | number): void {
   inset: 0 auto 0 0;
   z-index: 20;
   display: flex;
-  width: 248px;
+  width: 232px;
   flex-direction: column;
-  gap: 22px;
-  padding: 24px 18px;
-  border-right: 1px solid rgba(237, 228, 218, 0.9);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(18px);
+  padding: 20px 14px 16px;
+  border-right: 1px solid var(--pc-line);
+  background: var(--pc-surface);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 2px 6px;
+  gap: 10px;
+  padding: 2px 6px 0;
 }
 
 .brand-mark {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   place-items: center;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f7c9b3, #e8835a);
-  box-shadow: 0 8px 18px rgba(232, 131, 90, 0.28);
-  font-size: 22px;
+  border-radius: 7px;
+  background: var(--pc-primary);
+  color: #fff;
 }
 
 .brand-text {
@@ -150,88 +179,118 @@ function onUserSelect(key: string | number): void {
 }
 
 .brand-text strong {
-  font-size: 19px;
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 .brand-text small {
-  margin-top: 3px;
-  color: var(--pc-ink-soft);
+  margin-top: 2px;
+  color: var(--pc-ink-faint);
   font-size: 11px;
+}
+
+.nav-label {
+  margin: 26px 8px 8px;
+  color: var(--pc-ink-faint);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 11px 13px;
-  border-radius: 12px;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: var(--pc-radius-sm);
   color: var(--pc-ink-soft);
-  font-size: 14px;
-  font-weight: 600;
-  transition: 0.18s ease;
+  font-size: 13.5px;
+  font-weight: 550;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .nav-item:hover {
-  background: #f7f1ea;
+  background: var(--pc-surface-muted);
   color: var(--pc-ink);
 }
 
 .nav-item.active {
   background: var(--pc-primary-soft);
-  color: #b85f3c;
-  box-shadow: inset 0 0 0 1px rgba(232, 131, 90, 0.14);
+  color: var(--pc-primary);
+  font-weight: 650;
 }
 
-.nav-icon {
-  font-size: 17px;
+.nav-item.active::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: -14px;
+  width: 2px;
+  background: var(--pc-primary);
+  content: '';
 }
 
-.sidebar-card {
-  position: relative;
+.sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   margin-top: auto;
-  padding: 16px;
-  border: 1px solid rgba(232, 131, 90, 0.18);
-  border-radius: 16px;
-  background: linear-gradient(160deg, #fff7f2, #fdf0e9);
 }
 
-.sidebar-card-badge {
-  display: inline-block;
-  margin-bottom: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(232, 131, 90, 0.16);
-  color: #b85f3c;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+.sidebar-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 8px;
+  border-top: 1px solid var(--pc-line);
+  font-size: 11px;
 }
 
-.sidebar-card strong {
-  display: block;
-  font-size: 14px;
+.sidebar-note-label {
+  color: var(--pc-ink-faint);
 }
 
-.sidebar-card p {
-  margin: 6px 0 12px;
+.sidebar-note-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--pc-ink-soft);
-  font-size: 12px;
-  line-height: 1.6;
+}
+
+.sidebar-note-value .status-dot {
+  color: var(--pc-ok);
 }
 
 .user-box {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 6px 2px;
-  border-top: 1px solid var(--pc-line);
+  gap: 9px;
+  padding: 2px 6px;
+}
+
+.user-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--pc-surface-muted);
+  color: var(--pc-primary);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .user-meta {
@@ -239,24 +298,88 @@ function onUserSelect(key: string | number): void {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 .user-meta strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .user-meta span {
-  color: var(--pc-ink-soft);
+  color: var(--pc-ink-faint);
   font-size: 11px;
 }
 
 .main {
   min-height: 100vh;
-  margin-left: 248px;
+  margin-left: 232px;
+}
+
+.topbar {
+  display: flex;
+  height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--pc-line);
+  background: var(--pc-surface);
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--pc-ink-faint);
+  font-size: 12.5px;
+}
+
+.crumb-root {
+  color: var(--pc-ink-soft);
+}
+
+.crumb-current {
+  color: var(--pc-ink);
+  font-weight: 600;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar-date {
+  color: var(--pc-ink-faint);
+  font-size: 12px;
+}
+
+.assistant-button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface);
+  color: var(--pc-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.assistant-button:hover {
+  border-color: var(--pc-primary);
+  background: var(--pc-primary-soft);
+  color: var(--pc-primary);
 }
 
 .mobile-bar {
@@ -272,6 +395,10 @@ function onUserSelect(key: string | number): void {
     margin-left: 0;
   }
 
+  .topbar {
+    display: none;
+  }
+
   .mobile-bar {
     position: sticky;
     top: 0;
@@ -280,14 +407,17 @@ function onUserSelect(key: string | number): void {
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
-    border-bottom: 1px solid rgba(237, 228, 218, 0.9);
-    background: rgba(251, 247, 242, 0.92);
-    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--pc-line);
+    background: var(--pc-surface);
   }
 
   .mobile-brand {
-    font-size: 15px;
-    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--pc-primary);
+    font-size: 14px;
+    font-weight: 700;
     white-space: nowrap;
   }
 
@@ -295,20 +425,20 @@ function onUserSelect(key: string | number): void {
     display: flex;
     flex: 1;
     justify-content: flex-end;
-    gap: 4px;
+    gap: 2px;
   }
 
   .mobile-nav a {
-    padding: 6px 10px;
-    border-radius: 9px;
+    padding: 5px 8px;
+    border-radius: 5px;
     color: var(--pc-ink-soft);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 550;
   }
 
   .mobile-nav a.active {
     background: var(--pc-primary-soft);
-    color: #b85f3c;
+    color: var(--pc-primary);
   }
 }
 </style>

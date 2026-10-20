@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NCard, NEmpty, NSpin } from 'naive-ui'
+import { NButton, NEmpty, NSpin } from 'naive-ui'
 
+import AppIcon from '@/components/AppIcon.vue'
 import { listHealthRecords, listReminders } from '@/api/health'
 import { listPets } from '@/api/pets'
 import type { Pet, Reminder } from '@/types'
@@ -44,35 +45,31 @@ const overdueCount = computed(
 const stats = computed(() => [
   {
     key: 'pets',
-    icon: '🐾',
     label: '宠物档案',
     value: pets.value.length,
-    hint: '已建档的毛孩子',
-    tone: 'coral',
+    hint: '已建档',
+    tone: 'plain',
   },
   {
     key: 'health',
-    icon: '📋',
     label: '健康记录',
     value: healthRecordCount.value,
-    hint: '疫苗、驱虫与就诊',
-    tone: 'sage',
+    hint: '疫苗 / 驱虫 / 就诊',
+    tone: 'plain',
   },
   {
     key: 'reminders',
-    icon: '⏰',
     label: '待处理提醒',
     value: reminderRows.value.length,
     hint: '按到期日排序',
-    tone: 'amber',
+    tone: 'warn',
   },
   {
     key: 'overdue',
-    icon: '🚨',
     label: '已逾期',
     value: overdueCount.value,
-    hint: overdueCount.value ? '建议尽快处理' : '目前没有逾期',
-    tone: overdueCount.value ? 'red' : 'grey',
+    hint: overdueCount.value ? '需要尽快处理' : '没有逾期',
+    tone: overdueCount.value ? 'danger' : 'plain',
   },
 ])
 
@@ -123,64 +120,59 @@ onMounted(load)
 
 <template>
   <div class="page">
-    <section class="hero fade-up">
-      <div class="hero-copy">
-        <span class="hero-eyebrow">{{ todayText }} · {{ greeting }}</span>
-        <h1>今天也要和毛孩子<br />好好相处。</h1>
+    <section class="overview">
+      <div class="overview-copy">
+        <span class="eyebrow">{{ todayText }} · {{ greeting }}</span>
+        <h1>工作台</h1>
         <p>
-          健康档案、体重变化和到期提醒都在这里。需要找寄养时，
-          先让 PawCare 助手帮你查一查空档。
+          当前有 {{ pets.length }} 只宠物、{{ reminderRows.length }} 条提醒待处理。
+          需要查档案或安排寄养时，可以直接交给助手。
         </p>
-        <div class="hero-actions">
-          <n-button type="primary" size="large" @click="router.push('/pets')">
-            查看宠物档案
-          </n-button>
-          <n-button size="large" quaternary @click="router.push('/agent')">
-            打开智能助手 →
-          </n-button>
-        </div>
       </div>
-      <div class="hero-visual" aria-hidden="true">
-        <span class="hero-paw">🐾</span>
-        <span class="float-chip chip-1">疫苗提醒</span>
-        <span class="float-chip chip-2">体重趋势</span>
-        <span class="float-chip chip-3">寄养空档</span>
+      <div class="overview-actions">
+        <n-button type="primary" @click="router.push('/pets')">
+          <template #icon><AppIcon name="paw" :size="15" /></template>
+          宠物档案
+        </n-button>
+        <n-button secondary @click="router.push('/boarding')">
+          <template #icon><AppIcon name="calendar" :size="15" /></template>
+          寄养预约
+        </n-button>
       </div>
     </section>
 
     <n-spin :show="loading">
-      <section class="stats fade-up delay-1">
+      <section class="metrics fade-up">
         <article
           v-for="item in stats"
           :key="item.key"
-          class="stat-card"
+          class="metric"
           :class="`tone-${item.tone}`"
         >
-          <span class="stat-icon">{{ item.icon }}</span>
-          <div>
-            <span class="stat-label">{{ item.label }}</span>
-            <strong class="stat-value">{{ item.value }}</strong>
-            <span class="stat-hint">{{ item.hint }}</span>
-          </div>
+          <span class="metric-label">
+            <span class="metric-dot" />
+            {{ item.label }}
+          </span>
+          <strong class="metric-value">{{ item.value }}</strong>
+          <span class="metric-hint">{{ item.hint }}</span>
         </article>
       </section>
 
-      <section class="content-grid fade-up delay-2">
-        <n-card class="panel" :bordered="false">
-          <template #header>
-            <div class="panel-head">
-              <div>
-                <h2 class="section-title">即将到期</h2>
-                <p class="muted panel-sub">按到期时间从近到远</p>
-              </div>
-              <span class="pill">{{ reminderRows.length }} 条</span>
+      <section class="content-grid fade-up delay-1">
+        <article class="panel">
+          <header class="panel-head">
+            <div>
+              <h2 class="section-title">即将到期</h2>
+              <p class="panel-sub">按到期时间从近到远</p>
             </div>
-          </template>
+            <span class="panel-count">{{ reminderRows.length }} 条</span>
+          </header>
 
           <div v-if="reminderRows.length" class="reminder-list">
             <button
               v-for="row in reminderRows.slice(0, 6)"
               :key="row.reminder.id"
+              type="button"
               class="reminder-row"
               @click="router.push(`/pets/${row.pet.id}`)"
             >
@@ -203,23 +195,21 @@ onMounted(load)
 
           <n-empty
             v-else
-            description="暂时没有待处理提醒，继续保持"
-            style="padding: 34px 0"
+            description="暂时没有待处理提醒"
+            style="padding: 36px 0"
           />
-        </n-card>
+        </article>
 
-        <n-card class="panel" :bordered="false">
-          <template #header>
-            <div class="panel-head">
-              <div>
-                <h2 class="section-title">我的毛孩子</h2>
-                <p class="muted panel-sub">点开查看完整档案</p>
-              </div>
-              <n-button text type="primary" @click="router.push('/pets')">
-                管理
-              </n-button>
+        <article class="panel">
+          <header class="panel-head">
+            <div>
+              <h2 class="section-title">我的宠物</h2>
+              <p class="panel-sub">点开查看完整档案</p>
             </div>
-          </template>
+            <n-button text type="primary" @click="router.push('/pets')">
+              管理
+            </n-button>
+          </header>
 
           <div v-if="pets.length" class="pet-mini-list">
             <router-link
@@ -228,21 +218,19 @@ onMounted(load)
               :to="`/pets/${pet.id}`"
               class="pet-mini"
             >
-              <span class="mini-avatar">
-                {{ pet.species === 'cat' ? '🐱' : pet.species === 'dog' ? '🐶' : '🐾' }}
-              </span>
+              <span class="mini-avatar">{{ pet.name.slice(0, 1) }}</span>
               <span class="mini-main">
                 <strong>{{ pet.name }}</strong>
                 <small>{{ pet.breed || (pet.species === 'cat' ? '猫咪' : '狗狗') }}</small>
               </span>
-              <span class="mini-arrow">→</span>
+              <AppIcon name="chevronRight" :size="15" class="mini-arrow" />
             </router-link>
           </div>
 
           <n-empty
             v-else
             description="还没有宠物档案"
-            style="padding: 34px 0"
+            style="padding: 36px 0"
           >
             <template #extra>
               <n-button type="primary" @click="router.push('/pets')">
@@ -250,20 +238,23 @@ onMounted(load)
               </n-button>
             </template>
           </n-empty>
-        </n-card>
+        </article>
       </section>
 
-      <section class="agent-banner fade-up delay-3">
-        <div class="agent-banner-copy">
-          <span class="pill">下一阶段</span>
-          <h2>让助手替你把信息串起来</h2>
-          <p>
-            “豆豆下个月要寄养五天，帮我看看有没有合适的笼舍。”
-            助手会先查档案、查空档，再生成一份需要你确认的预约草稿。
-          </p>
+      <section class="assistant-note fade-up delay-2">
+        <div class="assistant-note-head">
+          <span class="assistant-icon"><AppIcon name="chat" :size="16" /></span>
+          <div>
+            <h2>让助手把信息串起来</h2>
+            <p>
+              “豆豆下个月要寄养五天，帮我看看有没有合适的笼舍。”
+              助手会先查档案、查空档，再生成一份需要你确认的预约草稿。
+            </p>
+          </div>
         </div>
-        <n-button type="primary" size="large" @click="router.push('/agent')">
-          了解智能助手
+        <n-button type="primary" secondary @click="router.push('/agent')">
+          打开智能助手
+          <template #icon><AppIcon name="arrowRight" :size="15" /></template>
         </n-button>
       </section>
     </n-spin>
@@ -271,168 +262,114 @@ onMounted(load)
 </template>
 
 <style scoped>
-.hero {
-  position: relative;
-  display: grid;
-  overflow: hidden;
-  grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.65fr);
-  gap: 24px;
-  margin-bottom: 22px;
-  padding: 36px 38px;
-  border-radius: 26px;
-  background:
-    radial-gradient(circle at 82% 18%, rgba(255, 255, 255, 0.5), transparent 38%),
-    linear-gradient(135deg, #fbe3d4 0%, #f7c8ae 45%, #efac87 100%);
-  color: #4a2c1f;
-  box-shadow: 0 18px 44px rgba(179, 109, 72, 0.18);
-}
-
-.hero-eyebrow {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  opacity: 0.72;
-}
-
-.hero h1 {
-  margin: 12px 0 0;
-  font-size: clamp(30px, 3.6vw, 44px);
-  font-weight: 850;
-  letter-spacing: -0.035em;
-  line-height: 1.16;
-}
-
-.hero-copy > p {
-  max-width: 520px;
-  margin: 16px 0 0;
-  font-size: 14px;
-  line-height: 1.75;
-  opacity: 0.82;
-}
-
-.hero-actions {
+.overview {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--pc-line);
 }
 
-.hero-visual {
-  position: relative;
-  display: grid;
-  place-items: center;
+.overview-copy {
+  max-width: 640px;
 }
 
-.hero-paw {
-  font-size: 108px;
-  filter: drop-shadow(0 18px 26px rgba(110, 58, 32, 0.18));
-  transform: rotate(-8deg);
+.eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--pc-ink-faint);
+  font-size: 12px;
 }
 
-.float-chip {
-  position: absolute;
-  padding: 7px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 8px 18px rgba(116, 58, 32, 0.1);
-  font-size: 11px;
+.overview h1 {
+  margin: 0;
+  font-size: 24px;
   font-weight: 700;
-  backdrop-filter: blur(8px);
+  letter-spacing: -0.02em;
 }
 
-.chip-1 {
-  top: 10%;
-  left: 0;
+.overview p {
+  margin: 8px 0 0;
+  color: var(--pc-ink-soft);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
-.chip-2 {
-  right: 0;
-  top: 38%;
+.overview-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
-.chip-3 {
-  bottom: 14%;
-  left: 8%;
-}
-
-.stats {
+.metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  display: flex;
-  align-items: flex-start;
   gap: 12px;
-  padding: 17px 18px;
-  border: 1px solid rgba(237, 228, 218, 0.95);
-  border-radius: 17px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 8px 22px rgba(116, 88, 63, 0.05);
+  margin-bottom: 18px;
 }
 
-.stat-icon {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--pc-primary-soft);
-  font-size: 18px;
+.metric {
+  padding: 15px 16px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
 }
 
-.tone-sage .stat-icon {
-  background: var(--pc-sage-soft);
-}
-
-.tone-amber .stat-icon {
-  background: #fdf5e4;
-}
-
-.tone-red .stat-icon {
-  background: #fdecec;
-}
-
-.tone-grey .stat-icon {
-  background: #f3f0ec;
-}
-
-.stat-label {
-  display: block;
+.metric-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--pc-ink-soft);
   font-size: 12px;
 }
 
-.stat-value {
-  display: block;
-  margin-top: 1px;
-  font-size: 25px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+.metric-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pc-line-strong);
 }
 
-.stat-hint {
+.tone-warn .metric-dot {
+  background: var(--pc-warn);
+}
+
+.tone-danger .metric-dot {
+  background: var(--pc-danger);
+}
+
+.metric-value {
   display: block;
-  margin-top: 2px;
-  color: #9a8f85;
+  margin: 6px 0 2px;
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.tone-danger .metric-value {
+  color: var(--pc-danger);
+}
+
+.metric-hint {
+  color: var(--pc-ink-faint);
   font-size: 11px;
 }
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+  gap: 14px;
 }
 
 .panel {
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: var(--pc-shadow);
+  overflow: hidden;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
 }
 
 .panel-head {
@@ -440,63 +377,80 @@ onMounted(load)
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--pc-line);
 }
 
 .panel-sub {
   margin: 3px 0 0;
-  font-size: 12px;
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
 }
 
-.reminder-list {
+.panel-count {
+  color: var(--pc-ink-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reminder-list,
+.pet-mini-list {
   display: flex;
   flex-direction: column;
+  padding: 4px 8px;
 }
 
-.reminder-row {
+.reminder-row,
+.pet-mini {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 12px 4px;
+  padding: 11px 10px;
   border: 0;
-  border-bottom: 1px solid #f3ece4;
+  border-bottom: 1px solid #efefe9;
+  border-radius: 5px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.16s ease;
+  transition: background 0.14s ease;
 }
 
-.reminder-row:last-child {
+.reminder-row:last-child,
+.pet-mini:last-child {
   border-bottom: 0;
 }
 
-.reminder-row:hover {
-  border-radius: 12px;
-  background: #fdf8f4;
+.reminder-row:hover,
+.pet-mini:hover {
+  background: var(--pc-surface-muted);
 }
 
 .date-badge {
   display: flex;
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 13px;
-  background: var(--pc-primary-soft);
-  color: #b85f3c;
-  line-height: 1.05;
+  border: 1px solid var(--pc-line);
+  border-radius: 6px;
+  background: var(--pc-surface-muted);
+  line-height: 1.1;
 }
 
 .date-badge strong {
-  font-size: 17px;
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .date-badge small {
   margin-top: 2px;
+  color: var(--pc-ink-faint);
   font-size: 9px;
 }
 
@@ -509,53 +463,30 @@ onMounted(load)
 
 .reminder-main strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .reminder-main small {
-  margin-top: 3px;
-  color: var(--pc-ink-soft);
-  font-size: 11px;
-}
-
-.pill.red {
-  background: #fdecec;
-  color: #b84b4b;
-}
-
-.pet-mini-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.pet-mini {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 11px 4px;
-  border-bottom: 1px solid #f3ece4;
-  transition: background 0.16s ease;
-}
-
-.pet-mini:last-child {
-  border-bottom: 0;
-}
-
-.pet-mini:hover {
-  border-radius: 12px;
-  background: #fdf8f4;
+  margin-top: 2px;
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
 }
 
 .mini-avatar {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
   place-items: center;
-  border-radius: 13px;
-  background: #fdf0e9;
-  font-size: 20px;
+  border: 1px solid var(--pc-line);
+  border-radius: 6px;
+  background: var(--pc-surface-muted);
+  color: var(--pc-primary);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .mini-main {
@@ -566,74 +497,96 @@ onMounted(load)
 }
 
 .mini-main strong {
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .mini-main small {
   margin-top: 2px;
-  color: var(--pc-ink-soft);
-  font-size: 11px;
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
 }
 
 .mini-arrow {
-  color: #c4b6a8;
+  color: var(--pc-ink-faint);
 }
 
-.agent-banner {
+.assistant-note {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-top: 20px;
-  padding: 24px 28px;
-  border: 1px solid rgba(124, 154, 130, 0.22);
-  border-radius: 20px;
-  background: linear-gradient(120deg, #f0f5f0, #fbfaf4);
+  margin-top: 14px;
+  padding: 18px 20px;
+  border: 1px solid #cfdfd8;
+  border-radius: var(--pc-radius);
+  background: #f1f6f3;
 }
 
-.agent-banner-copy h2 {
-  margin: 10px 0 0;
-  font-size: 20px;
-  letter-spacing: -0.02em;
+.assistant-note-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.agent-banner-copy p {
-  max-width: 640px;
-  margin: 8px 0 0;
+.assistant-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--pc-primary);
+  color: #fff;
+}
+
+.assistant-note h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.assistant-note p {
+  max-width: 720px;
+  margin: 4px 0 0;
   color: var(--pc-ink-soft);
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 12.5px;
+  line-height: 1.65;
 }
 
 @media (max-width: 1080px) {
-  .stats {
+  .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 900px) {
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 28px 24px;
-  }
-
-  .hero-visual {
-    display: none;
+  .overview {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .content-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .agent-banner {
-    flex-direction: column;
+  .assistant-note {
     align-items: flex-start;
+    flex-direction: column;
   }
 }
 
 @media (max-width: 520px) {
-  .stats {
+  .metrics {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-actions {
+    width: 100%;
+  }
+
+  .overview-actions :deep(.n-button) {
+    flex: 1;
   }
 }
 </style>

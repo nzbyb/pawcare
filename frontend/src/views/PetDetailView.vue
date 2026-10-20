@@ -45,7 +45,6 @@ import {
   genderLabel,
   petAge,
   recordTypeLabel,
-  speciesEmoji,
   speciesLabel,
   today,
 } from '@/utils/format'
@@ -182,15 +181,15 @@ function renderChart(): void {
         type: 'category',
         boundaryGap: false,
         data: weights.value.map((item) => item.record_date),
-        axisLine: { lineStyle: { color: '#e8ded4' } },
+        axisLine: { lineStyle: { color: '#e2e2db' } },
         axisTick: { show: false },
-        axisLabel: { color: '#8a7b6e', fontSize: 11 },
+        axisLabel: { color: '#8a8e84', fontSize: 11 },
       },
       yAxis: {
         type: 'value',
         scale: true,
-        splitLine: { lineStyle: { color: '#f2eae2' } },
-        axisLabel: { color: '#8a7b6e', fontSize: 11, formatter: '{value} kg' },
+        splitLine: { lineStyle: { color: '#efefe9' } },
+        axisLabel: { color: '#8a8e84', fontSize: 11, formatter: '{value} kg' },
       },
       series: [
         {
@@ -200,13 +199,13 @@ function renderChart(): void {
           symbol: 'circle',
           symbolSize: 8,
           data: weights.value.map((item) => item.weight_kg),
-          lineStyle: { width: 3, color: '#E8835A' },
+          lineStyle: { width: 2, color: '#2F5D50' },
           itemStyle: {
-            color: '#E8835A',
+            color: '#2F5D50',
             borderColor: '#ffffff',
             borderWidth: 2,
           },
-          areaStyle: { color: 'rgba(232, 131, 90, 0.14)' },
+          areaStyle: { color: 'rgba(47, 93, 80, 0.08)' },
         },
       ],
     },
@@ -350,7 +349,10 @@ onBeforeUnmount(() => {
 
         <section class="pet-hero soft-card fade-up">
           <div class="hero-main">
-            <div class="avatar">{{ speciesEmoji(pet.species) }}</div>
+            <div class="avatar">
+              <strong>{{ pet.name.slice(0, 1) }}</strong>
+              <small>{{ pet.species === 'cat' ? 'CAT' : pet.species === 'dog' ? 'DOG' : 'PET' }}</small>
+            </div>
             <div class="hero-info">
               <div class="name-row">
                 <h1>{{ pet.name }}</h1>
@@ -384,7 +386,7 @@ onBeforeUnmount(() => {
                 {{ nextReminder ? dueLabel(nextReminder.due_date) : '暂无' }}
               </strong>
             </div>
-            <n-button @click="showEdit = true">编辑档案</n-button>
+            <n-button size="small" @click="showEdit = true">编辑档案</n-button>
           </div>
         </section>
 
@@ -434,7 +436,6 @@ onBeforeUnmount(() => {
                     <div class="record-title">
                       <n-tag
                         size="small"
-                        round
                         :type="recordTagType(record.record_type)"
                       >
                         {{ recordTypeLabel(record.record_type) }}
@@ -630,12 +631,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .back-row {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .back-link {
-  color: var(--pc-ink-soft);
-  font-size: 13px;
+  color: var(--pc-ink-faint);
+  font-size: 12.5px;
 }
 
 .back-link:hover {
@@ -647,7 +648,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 26px 28px;
+  padding: 22px 24px;
 }
 
 .hero-main {
@@ -657,15 +658,31 @@ onBeforeUnmount(() => {
 }
 
 .avatar {
-  display: grid;
-  width: 82px;
-  height: 82px;
-  flex: 0 0 82px;
-  place-items: center;
-  border-radius: 24px;
-  background: linear-gradient(145deg, #fdf0e9, #f7d4c0);
-  box-shadow: 0 12px 26px rgba(232, 131, 90, 0.16);
-  font-size: 40px;
+  display: flex;
+  width: 68px;
+  height: 68px;
+  flex: 0 0 68px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--pc-line);
+  border-radius: 7px;
+  background: var(--pc-surface-muted);
+  color: var(--pc-primary);
+  line-height: 1.1;
+}
+
+.avatar strong {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.avatar small {
+  margin-top: 3px;
+  color: var(--pc-ink-faint);
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
 }
 
 .name-row {
@@ -676,15 +693,15 @@ onBeforeUnmount(() => {
 
 .name-row h1 {
   margin: 0;
-  font-size: 30px;
-  font-weight: 850;
-  letter-spacing: -0.03em;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .meta-line {
   margin: 5px 0 9px;
   color: var(--pc-ink-soft);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .hero-tags {
@@ -713,18 +730,21 @@ onBeforeUnmount(() => {
 
 .mini-stat strong {
   margin-top: 3px;
-  font-size: 16px;
-  font-weight: 750;
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .note-card {
-  margin-top: 14px;
-  padding: 16px 20px;
+  margin-top: 12px;
+  padding: 14px 18px;
 }
 
 .note-card strong {
-  font-size: 12px;
-  color: var(--pc-ink-soft);
+  color: var(--pc-ink-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
 .note-card p {
@@ -735,8 +755,8 @@ onBeforeUnmount(() => {
 }
 
 .tab-shell {
-  margin-top: 16px;
-  padding: 18px 22px 24px;
+  margin-top: 12px;
+  padding: 16px 20px 22px;
 }
 
 .tab-toolbar {
@@ -760,10 +780,10 @@ onBeforeUnmount(() => {
 }
 
 .record-item {
-  padding: 14px 16px;
-  border: 1px solid #f0e7dd;
-  border-radius: 14px;
-  background: #fffdfb;
+  padding: 13px 15px;
+  border: 1px solid var(--pc-line);
+  border-radius: 6px;
+  background: var(--pc-surface);
 }
 
 .record-head {
@@ -798,7 +818,7 @@ onBeforeUnmount(() => {
 
 .record-note {
   margin: 7px 0 0;
-  color: #6d635b;
+  color: var(--pc-ink-soft);
   font-size: 12px;
   line-height: 1.65;
   white-space: pre-wrap;
@@ -814,7 +834,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   padding: 12px 2px;
-  border-bottom: 1px solid #f3ece4;
+  border-bottom: 1px solid #efefe9;
 }
 
 .reminder-item:last-child {
@@ -823,20 +843,23 @@ onBeforeUnmount(() => {
 
 .date-badge {
   display: flex;
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 13px;
-  background: var(--pc-primary-soft);
-  color: #b85f3c;
-  line-height: 1.05;
+  border: 1px solid var(--pc-line);
+  border-radius: 6px;
+  background: var(--pc-surface-muted);
+  color: var(--pc-ink);
+  line-height: 1.1;
 }
 
 .date-badge strong {
-  font-size: 17px;
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .date-badge small {
@@ -851,18 +874,19 @@ onBeforeUnmount(() => {
 }
 
 .reminder-main strong {
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .reminder-main small {
   margin-top: 2px;
-  color: var(--pc-ink-soft);
+  color: var(--pc-ink-faint);
   font-size: 11px;
 }
 
 .pill.red {
-  background: #fdecec;
-  color: #b84b4b;
+  background: var(--pc-danger-soft);
+  color: var(--pc-danger);
 }
 
 .form-grid {
@@ -905,15 +929,17 @@ onBeforeUnmount(() => {
   }
 
   .avatar {
-    width: 64px;
-    height: 64px;
-    flex-basis: 64px;
-    border-radius: 19px;
-    font-size: 30px;
+    width: 56px;
+    height: 56px;
+    flex-basis: 56px;
+  }
+
+  .avatar strong {
+    font-size: 20px;
   }
 
   .name-row h1 {
-    font-size: 24px;
+    font-size: 20px;
   }
 
   .form-grid {

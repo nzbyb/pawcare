@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { NButton, NEmpty, NSpin } from 'naive-ui'
 
+import AppIcon from '@/components/AppIcon.vue'
 import { listPets } from '@/api/pets'
 import PetCard from '@/components/PetCard.vue'
 import PetFormModal from '@/components/PetFormModal.vue'
@@ -38,8 +39,9 @@ onMounted(load)
           为每只毛孩子建立独立档案，健康记录和体重变化都会归档在这里。
         </p>
       </div>
-      <n-button type="primary" size="large" @click="showModal = true">
-        + 新增宠物
+      <n-button type="primary" @click="showModal = true">
+        <template #icon><AppIcon name="plus" :size="15" /></template>
+        新增宠物
       </n-button>
     </div>
 
@@ -68,5 +70,6 @@ onMounted(load)
   display: grid;
   min-height: 320px;
   place-items: center;
+  background: var(--pc-surface);
 }
 </style>

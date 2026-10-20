@@ -11,6 +11,7 @@ import {
   useMessage,
 } from 'naive-ui'
 
+import AppIcon from '@/components/AppIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -35,9 +36,9 @@ const registerForm = reactive({
 })
 
 const highlights = [
-  { icon: '📋', title: '健康档案', text: '疫苗、驱虫、就诊记录集中管理，到期自动提醒。' },
-  { icon: '🏡', title: '寄养预约', text: '查看笼舍空档，生成预约草稿，确认后才真正下单。' },
-  { icon: '🤖', title: '智能助手', text: '用一句话查档案、问注意事项、预约寄养。' },
+  { title: '健康档案', text: '疫苗、驱虫、就诊记录集中管理，到期自动提醒。' },
+  { title: '寄养预约', text: '查看笼舍空档，生成预约草稿，确认后才真正下单。' },
+  { title: '智能助手', text: '用一句话查档案、问注意事项、预约寄养。' },
 ]
 
 function redirectAfterLogin(): void {
@@ -99,7 +100,7 @@ async function handleRegister(): Promise<void> {
   <div class="login-page">
     <section class="brand-panel">
       <div class="brand-top">
-        <span class="logo">🐾</span>
+        <span class="logo"><AppIcon name="paw" :size="22" /></span>
         <div>
           <h1>PawCare</h1>
           <p>宠物寄养与健康管理</p>
@@ -107,7 +108,7 @@ async function handleRegister(): Promise<void> {
       </div>
 
       <div class="brand-copy">
-        <span class="eyebrow">为毛孩子多想一步</span>
+        <span class="eyebrow">毕业设计项目</span>
         <h2>把健康档案、寄养安排和日常提醒，放在同一个地方。</h2>
         <p>
           记录每一次疫苗和体重变化，预约寄养前先看空档，
@@ -116,8 +117,8 @@ async function handleRegister(): Promise<void> {
       </div>
 
       <div class="highlights">
-        <div v-for="item in highlights" :key="item.title" class="highlight">
-          <span class="highlight-icon">{{ item.icon }}</span>
+        <div v-for="(item, index) in highlights" :key="item.title" class="highlight">
+          <span class="highlight-index">0{{ index + 1 }}</span>
           <div>
             <strong>{{ item.title }}</strong>
             <p>{{ item.text }}</p>
@@ -125,19 +126,20 @@ async function handleRegister(): Promise<void> {
         </div>
       </div>
 
-      <p class="brand-foot">PawCare · 毕业设计项目</p>
+      <p class="brand-foot">PawCare · 2026</p>
     </section>
 
     <section class="form-panel">
       <div class="form-card">
         <div class="form-head">
-          <span class="form-logo">🐾</span>
-          <h2>{{ activeTab === 'login' ? '欢迎回来' : '创建 PawCare 账号' }}</h2>
+          <span class="form-logo"><AppIcon name="paw" :size="20" /></span>
+          <span class="form-kicker">PawCare</span>
+          <h2>{{ activeTab === 'login' ? '登录账户' : '创建账户' }}</h2>
           <p>
             {{
               activeTab === 'login'
-                ? '登录后继续照顾你的毛孩子。'
-                : '注册后即可建立宠物档案。'
+                ? '登录后继续管理宠物档案与寄养安排。'
+                : '注册后即可建立第一份宠物档案。'
             }}
           </p>
         </div>
@@ -238,162 +240,181 @@ async function handleRegister(): Promise<void> {
 .login-page {
   display: grid;
   min-height: 100vh;
-  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 0.95fr);
+  grid-template-columns: minmax(0, 1.02fr) minmax(440px, 0.98fr);
 }
 
 .brand-panel {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 48px 56px;
-  background:
-    radial-gradient(circle at 16% 14%, rgba(255, 255, 255, 0.72), transparent 36%),
-    linear-gradient(150deg, #f8d7c4 0%, #f3b997 42%, #e8835a 100%);
-  color: #4a2c1f;
+  padding: 44px 52px 36px;
+  background: #1f3a32;
+  color: #f2f4ef;
 }
 
 .brand-top {
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 11px;
 }
 
 .logo {
   display: grid;
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   place-items: center;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 12px 30px rgba(97, 52, 29, 0.18);
-  font-size: 27px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .brand-top h1 {
   margin: 0;
-  font-size: 24px;
-  letter-spacing: -0.02em;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .brand-top p {
   margin: 2px 0 0;
-  font-size: 13px;
-  opacity: 0.78;
+  color: rgba(242, 244, 239, 0.58);
+  font-size: 11.5px;
 }
 
 .brand-copy {
   max-width: 540px;
-  padding: 48px 0 32px;
+  padding: 48px 0 30px;
 }
 
 .eyebrow {
   display: inline-block;
   margin-bottom: 16px;
-  padding: 5px 12px;
-  border: 1px solid rgba(74, 44, 31, 0.18);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  color: rgba(242, 244, 239, 0.5);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .brand-copy h2 {
   margin: 0;
-  font-size: clamp(30px, 3.4vw, 46px);
-  font-weight: 850;
-  letter-spacing: -0.035em;
-  line-height: 1.18;
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.28;
 }
 
 .brand-copy > p {
-  margin: 20px 0 0;
-  max-width: 460px;
-  font-size: 15px;
+  max-width: 470px;
+  margin: 18px 0 0;
+  color: rgba(242, 244, 239, 0.66);
+  font-size: 13.5px;
   line-height: 1.8;
-  opacity: 0.82;
 }
 
 .highlights {
   display: flex;
+  max-width: 540px;
   flex-direction: column;
-  gap: 12px;
-  max-width: 520px;
 }
 
 .highlight {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
   gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.38);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(8px);
+  padding: 14px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.highlight-icon {
-  font-size: 20px;
+.highlight:last-child {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.highlight-index {
+  padding-top: 1px;
+  color: rgba(242, 244, 239, 0.4);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .highlight strong {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .highlight p {
   margin: 3px 0 0;
+  color: rgba(242, 244, 239, 0.58);
   font-size: 12px;
   line-height: 1.6;
-  opacity: 0.8;
 }
 
 .brand-foot {
-  margin: 34px 0 0;
-  font-size: 12px;
-  opacity: 0.6;
+  margin: 28px 0 0;
+  color: rgba(242, 244, 239, 0.34);
+  font-size: 11px;
 }
 
 .form-panel {
   display: grid;
   place-items: center;
   padding: 40px 28px;
+  background: var(--pc-bg);
 }
 
 .form-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
+  padding: 30px 32px 26px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
 }
 
 .form-head {
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 
 .form-logo {
   display: none;
 }
 
+.form-kicker {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--pc-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .form-head h2 {
   margin: 0;
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 22px;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .form-head p {
-  margin: 8px 0 0;
+  margin: 7px 0 0;
   color: var(--pc-ink-soft);
-  font-size: 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
 .form {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .form-tip {
-  margin: 22px 0 0;
-  color: #9a8f85;
-  font-size: 12px;
+  margin: 20px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--pc-line);
+  color: var(--pc-ink-faint);
+  font-size: 11px;
   line-height: 1.6;
-  text-align: center;
 }
 
 @media (max-width: 900px) {
@@ -406,18 +427,22 @@ async function handleRegister(): Promise<void> {
   }
 
   .form-panel {
-    padding: 32px 20px;
+    padding: 28px 16px;
+  }
+
+  .form-card {
+    padding: 24px 20px;
   }
 
   .form-logo {
     display: grid;
-    width: 54px;
-    height: 54px;
+    width: 38px;
+    height: 38px;
     margin-bottom: 14px;
     place-items: center;
-    border-radius: 17px;
-    background: linear-gradient(135deg, #f7c9b3, #e8835a);
-    font-size: 27px;
+    border-radius: 7px;
+    background: var(--pc-primary);
+    color: #fff;
   }
 }
 </style>

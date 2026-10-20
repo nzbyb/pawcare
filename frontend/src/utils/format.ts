@@ -18,12 +18,6 @@ const RECORD_TYPE_LABELS: Record<string, string> = {
   symptom: '症状',
 }
 
-const SPECIES_EMOJI: Record<string, string> = {
-  dog: '🐶',
-  cat: '🐱',
-  other: '🐾',
-}
-
 export function formatDate(value?: string | number | Date | null): string {
   if (!value) return '—'
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -82,8 +76,4 @@ export function genderLabel(gender: string): string {
 
 export function recordTypeLabel(recordType: string): string {
   return RECORD_TYPE_LABELS[recordType] ?? recordType
-}
-
-export function speciesEmoji(species: string): string {
-  return SPECIES_EMOJI[species] ?? '🐾'
 }

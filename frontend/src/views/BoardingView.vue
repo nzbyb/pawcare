@@ -12,6 +12,7 @@ import {
   useMessage,
 } from 'naive-ui'
 
+import AppIcon from '@/components/AppIcon.vue'
 import {
   cancelDraft as cancelDraftApi,
   cancelOrder as cancelOrderApi,
@@ -423,9 +424,7 @@ onBeforeUnmount(stopCountdown)
       <div>
         <div class="title-row">
           <h1 class="page-title">寄养预约</h1>
-          <n-tag round type="warning" size="small">
-            {{ isStaff ? '寄养员工作台' : '先草稿，后确认' }}
-          </n-tag>
+          <span class="pill sage">{{ isStaff ? '寄养员工作台' : '先草稿，后确认' }}</span>
         </div>
         <p class="page-subtitle">
           查询笼舍空档、生成预约草稿，再由你亲自确认。订单状态和每日报告都在这里。
@@ -434,24 +433,28 @@ onBeforeUnmount(stopCountdown)
 
       <div v-if="isStaff" class="stat-strip">
         <div class="stat-chip">
-          <strong>{{ stats.pending }}</strong>
           <span>待接单</span>
+          <strong>{{ stats.pending }}</strong>
         </div>
         <div class="stat-chip">
-          <strong>{{ stats.confirmed }}</strong>
           <span>待入住</span>
+          <strong>{{ stats.confirmed }}</strong>
         </div>
         <div class="stat-chip sage">
-          <strong>{{ stats.boarding }}</strong>
           <span>寄养中</span>
+          <strong>{{ stats.boarding }}</strong>
         </div>
       </div>
     </div>
 
     <div v-if="isOwner" class="booking-grid">
-      <section class="soft-card panel">
-        <h2 class="section-title">选择时间与笼舍</h2>
-        <p class="panel-sub">先查空档，再挑一间合适的房间。</p>
+      <section class="panel">
+        <header class="panel-head">
+          <div>
+            <h2 class="section-title">选择时间与笼舍</h2>
+            <p class="panel-sub">先查空档，再挑一间合适的房间。</p>
+          </div>
+        </header>
 
         <div class="field-grid">
           <label class="field">
@@ -494,7 +497,7 @@ onBeforeUnmount(stopCountdown)
           >
             <div class="kennel-top">
               <strong>{{ kennel.code }}</strong>
-              <n-tag size="small" round>{{ sizeLabel(kennel.size) }}</n-tag>
+              <n-tag size="small">{{ sizeLabel(kennel.size) }}</n-tag>
             </div>
             <p>{{ kennel.note || '标准笼舍' }}</p>
             <div class="kennel-price">
@@ -529,10 +532,10 @@ onBeforeUnmount(stopCountdown)
         </n-button>
       </section>
 
-      <aside class="soft-card panel draft-panel">
+      <aside class="panel draft-panel">
         <template v-if="draft">
           <div class="draft-head">
-            <span class="pill">待确认草稿</span>
+            <span class="pill amber">待确认草稿</span>
             <span class="countdown">{{ formatDuration(countdown) }}</span>
           </div>
 
@@ -565,7 +568,7 @@ onBeforeUnmount(stopCountdown)
 
         <template v-else>
           <div class="draft-empty">
-            <span class="draft-icon">📝</span>
+            <span class="draft-icon"><AppIcon name="clipboard" :size="18" /></span>
             <h3>为什么先出草稿？</h3>
             <p>
               日期、笼舍和金额会先整理成一份 15 分钟有效的草稿；只有你在这里点击确认，
@@ -581,7 +584,7 @@ onBeforeUnmount(stopCountdown)
       </aside>
     </div>
 
-    <section class="soft-card panel orders-panel">
+    <section class="panel orders-panel">
       <div class="orders-head">
         <div>
           <h2 class="section-title">{{ isStaff ? '寄养订单' : '我的预约' }}</h2>
@@ -603,7 +606,7 @@ onBeforeUnmount(stopCountdown)
             <div class="order-main">
               <div class="order-title">
                 <strong>{{ order.pet_name || `宠物 #${order.pet_id}` }}</strong>
-                <n-tag size="small" round :type="statusMeta(order.status).type">
+                <n-tag size="small" :type="statusMeta(order.status).type">
                   {{ statusMeta(order.status).label }}
                 </n-tag>
               </div>
@@ -739,51 +742,73 @@ onBeforeUnmount(stopCountdown)
 
 .stat-strip {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .stat-chip {
   display: flex;
-  min-width: 84px;
+  min-width: 88px;
   flex-direction: column;
-  padding: 10px 14px;
-  border: 1px solid #f0e0d4;
-  border-radius: 14px;
-  background: #fff8f3;
-}
-
-.stat-chip strong {
-  font-size: 20px;
-  line-height: 1.1;
+  gap: 3px;
+  padding: 9px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
 }
 
 .stat-chip span {
-  margin-top: 3px;
-  color: var(--pc-ink-soft);
+  color: var(--pc-ink-faint);
   font-size: 11px;
 }
 
-.stat-chip.sage {
-  border-color: #dce8de;
-  background: var(--pc-sage-soft);
+.stat-chip strong {
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.stat-chip.sage strong {
+  color: var(--pc-primary);
 }
 
 .booking-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
-  gap: 18px;
+  gap: 14px;
   align-items: start;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .panel {
-  padding: 22px;
+  padding: 20px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--pc-line);
+}
+
+.section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .panel-sub {
-  margin: 5px 0 18px;
-  color: var(--pc-ink-soft);
-  font-size: 12px;
+  margin: 3px 0 0;
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
   line-height: 1.6;
 }
 
@@ -798,7 +823,7 @@ onBeforeUnmount(stopCountdown)
   flex-direction: column;
   gap: 6px;
   color: var(--pc-ink-soft);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -810,36 +835,38 @@ onBeforeUnmount(stopCountdown)
 }
 
 .hint {
+  color: var(--pc-ink-faint);
   font-size: 11px;
 }
 
 .kennel-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
 .kennel-card {
-  padding: 13px 14px;
-  border: 1px solid #eee3d8;
-  border-radius: 14px;
-  background: #fff;
+  padding: 12px 13px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: 0.18s ease;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease;
 }
 
 .kennel-card:hover {
-  border-color: #e6b79f;
-  box-shadow: 0 8px 18px rgba(116, 88, 63, 0.08);
+  border-color: var(--pc-line-strong);
+  background: #fcfcfa;
 }
 
 .kennel-card.selected {
   border-color: var(--pc-primary);
-  background: #fff8f4;
-  box-shadow: 0 0 0 2px rgba(232, 131, 90, 0.12);
+  background: var(--pc-primary-soft);
 }
 
 .kennel-top {
@@ -850,26 +877,28 @@ onBeforeUnmount(stopCountdown)
 }
 
 .kennel-top strong {
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 650;
 }
 
 .kennel-card p {
-  margin: 7px 0;
-  color: var(--pc-ink-soft);
+  margin: 6px 0;
+  color: var(--pc-ink-faint);
   font-size: 11px;
   line-height: 1.5;
 }
 
 .kennel-price {
-  color: #b85f3c;
-  font-size: 17px;
-  font-weight: 800;
+  color: var(--pc-ink);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 .kennel-price small {
   margin-left: 2px;
-  color: var(--pc-ink-soft);
-  font-size: 11px;
+  color: var(--pc-ink-faint);
+  font-size: 10.5px;
   font-weight: 500;
 }
 
@@ -878,8 +907,9 @@ onBeforeUnmount(stopCountdown)
   min-height: 120px;
   place-items: center;
   margin-bottom: 14px;
-  border: 1px dashed #eee3d8;
-  border-radius: 14px;
+  border: 1px dashed var(--pc-line-strong);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface-muted);
 }
 
 .note-field {
@@ -899,10 +929,11 @@ onBeforeUnmount(stopCountdown)
 }
 
 .countdown {
-  color: #b85f3c;
+  color: var(--pc-warn);
   font-size: 16px;
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .draft-pet {
@@ -910,16 +941,19 @@ onBeforeUnmount(stopCountdown)
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 14px;
-  border-radius: 14px;
-  background: #fdf7f2;
+  padding: 12px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface-muted);
 }
 
 .draft-pet strong {
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 650;
 }
 
 .draft-pet span {
+  color: var(--pc-ink-soft);
   font-size: 12px;
 }
 
@@ -934,52 +968,59 @@ onBeforeUnmount(stopCountdown)
   justify-content: space-between;
   gap: 10px;
   padding-bottom: 8px;
-  border-bottom: 1px dashed #f0e5da;
-  font-size: 13px;
+  border-bottom: 1px solid #efefe9;
+  font-size: 12.5px;
 }
 
 .draft-rows span {
-  color: var(--pc-ink-soft);
+  color: var(--pc-ink-faint);
+}
+
+.draft-rows strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .draft-tip {
   margin: 0;
-  color: #9a8f85;
+  color: var(--pc-ink-faint);
   font-size: 11px;
   line-height: 1.6;
 }
 
 .draft-empty {
-  padding: 8px 2px;
+  padding: 2px;
 }
 
 .draft-icon {
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 36px;
+  height: 36px;
   place-items: center;
-  border-radius: 14px;
+  border: 1px solid #cfdfd8;
+  border-radius: var(--pc-radius-sm);
   background: var(--pc-primary-soft);
-  font-size: 22px;
+  color: var(--pc-primary);
 }
 
 .draft-empty h3 {
   margin: 14px 0 8px;
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: 650;
 }
 
 .draft-empty p {
   margin: 0;
   color: var(--pc-ink-soft);
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.7;
 }
 
 .draft-empty ul {
   margin: 14px 0 0;
-  padding-left: 18px;
+  padding-left: 16px;
   color: var(--pc-ink-soft);
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.9;
 }
 
@@ -992,17 +1033,17 @@ onBeforeUnmount(stopCountdown)
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
-}
-
-.orders-head .panel-sub {
-  margin-bottom: 0;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--pc-line);
 }
 
 .order-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  overflow: hidden;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
 }
 
 .order-card {
@@ -1010,36 +1051,46 @@ onBeforeUnmount(stopCountdown)
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 15px 16px;
-  border: 1px solid #f0e7de;
-  border-radius: 15px;
-  background: #fffdfa;
+  padding: 14px 16px;
+  border-bottom: 1px solid #efefe9;
+  background: var(--pc-surface);
+  transition: background 0.14s ease;
+}
+
+.order-card:last-child {
+  border-bottom: 0;
+}
+
+.order-card:hover {
+  background: #fcfcfa;
 }
 
 .order-title {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
 }
 
 .order-title strong {
-  font-size: 15px;
+  font-size: 13.5px;
+  font-weight: 650;
 }
 
 .order-meta {
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   color: var(--pc-ink-soft);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .dot-sep {
-  margin: 0 4px;
-  color: #cbbfb4;
+  margin: 0 3px;
+  color: var(--pc-line-strong);
 }
 
 .order-note {
-  margin: 7px 0 0;
-  color: #9a8f85;
+  margin: 6px 0 0;
+  color: var(--pc-ink-faint);
   font-size: 11px;
   line-height: 1.6;
 }
@@ -1049,19 +1100,20 @@ onBeforeUnmount(stopCountdown)
   flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
-  gap: 9px;
+  gap: 8px;
 }
 
 .order-amount {
-  color: #b85f3c;
-  font-size: 18px;
-  font-weight: 800;
+  color: var(--pc-ink);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 .order-amount small {
   display: block;
   margin-top: 2px;
-  color: var(--pc-ink-soft);
+  color: var(--pc-ink-faint);
   font-size: 10px;
   font-weight: 500;
   text-align: right;
@@ -1077,24 +1129,24 @@ onBeforeUnmount(stopCountdown)
 .report-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .report-item {
   display: flex;
   gap: 12px;
   padding: 12px 14px;
-  border: 1px solid #f0e7de;
-  border-radius: 13px;
-  background: #fffdfa;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface-muted);
 }
 
 .report-date {
-  flex: 0 0 84px;
+  flex: 0 0 82px;
   color: var(--pc-ink-soft);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .report-body {
@@ -1105,32 +1157,33 @@ onBeforeUnmount(stopCountdown)
 .report-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 
 .report-body p {
   margin: 8px 0 0;
   color: var(--pc-ink);
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.65;
 }
 
 .report-form {
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px solid #f0e7de;
+  border-top: 1px solid var(--pc-line);
 }
 
 .report-form h3 {
   margin: 0 0 12px;
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 650;
 }
 
 .report-form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .report-form .n-input {

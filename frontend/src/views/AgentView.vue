@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NInput, NTag } from 'naive-ui'
+import { NButton, NInput } from 'naive-ui'
 
+import AppIcon from '@/components/AppIcon.vue'
 import { getConversation, listConversations, streamChat } from '@/api/agent'
 import type {
   AgentConversation,
@@ -30,40 +31,36 @@ const examples = [
 
 const capabilities = [
   {
-    icon: '🔎',
+    icon: 'search',
     title: '查档案',
     text: '按宠物名和时间范围查询疫苗、驱虫、就诊记录。',
   },
   {
-    icon: '📚',
+    icon: 'book',
     title: '护理知识',
     text: '检索寄养、疫苗、驱虫、换粮等知识，并标注来源。',
   },
   {
-    icon: '📅',
+    icon: 'calendar',
     title: '查空档',
     text: '输入日期和体型，返回可用笼舍与预估价格。',
   },
   {
-    icon: '📝',
+    icon: 'clipboard',
     title: '生成草稿',
     text: '把预约信息整理成草稿，展示日期、笼舍和金额。',
   },
   {
-    icon: '✅',
+    icon: 'shield',
     title: '人工确认',
     text: '草稿不会直接下单，需要你在寄养页单独确认。',
   },
 ]
 
-const roadmap = [
-  { label: '权限感知的服务层', done: true },
-  { label: '寄养草稿与确认接口', done: true },
-  { label: 'Agent 工具层与多轮调用', done: true },
-  { label: '会话持久化与 trace', done: true },
-  { label: 'SSE 流式输出', done: true },
-  { label: 'RAG 知识库与引用', done: true },
-  { label: '评测集与消融实验', done: false },
+const boundaries = [
+  '预约确认接口不在 Agent 工具列表里，只能由你本人提交。',
+  '用户身份来自登录态，不读取模型给出的 user_id。',
+  '宠物备注和知识库内容按不可信数据处理，不作为指令执行。',
 ]
 
 const toolLabels: Record<string, string> = {
@@ -308,28 +305,30 @@ onMounted(() => {
       <div>
         <div class="title-row">
           <h1 class="page-title">智能助手</h1>
-          <n-tag round type="success" size="small">deepseek-flash · 已接入</n-tag>
+          <span class="pill sage">deepseek-flash · 已接入</span>
         </div>
         <p class="page-subtitle">
           用自然语言查询档案、检查寄养空档，并把预约整理成可确认的草稿。
         </p>
       </div>
       <n-button quaternary size="small" :disabled="sending" @click="startNewConversation">
-        + 新对话
+        <template #icon><AppIcon name="plus" :size="14" /></template>
+        新对话
       </n-button>
     </div>
 
     <div class="agent-grid">
-      <section class="chat-shell soft-card">
+      <section class="chat-shell">
         <header class="chat-head">
           <div class="assistant">
-            <span class="assistant-avatar">🐾</span>
+            <span class="assistant-avatar"><AppIcon name="paw" :size="19" /></span>
             <div>
               <strong>PawCare 助手</strong>
               <small>权限感知 · 草稿确认 · 可追溯</small>
             </div>
           </div>
           <span class="status-dot" :class="{ busy: sending }">
+            <span class="status-mark" />
             {{ sending ? '思考中' : '在线' }}
           </span>
         </header>
@@ -368,7 +367,9 @@ onMounted(() => {
             class="bubble-row"
             :class="bubble.role"
           >
-            <span v-if="bubble.role === 'assistant'" class="bubble-avatar">🐾</span>
+            <span v-if="bubble.role === 'assistant'" class="bubble-avatar">
+              <AppIcon name="paw" :size="14" />
+            </span>
             <div class="bubble" :class="bubble.role">
               <div class="bubble-text" v-html="renderMessage(bubble.content)"></div>
               <div
@@ -438,7 +439,7 @@ onMounted(() => {
           </div>
 
           <div v-if="sending && streamingBubbleId === null" class="bubble-row assistant">
-            <span class="bubble-avatar">🐾</span>
+            <span class="bubble-avatar"><AppIcon name="paw" :size="14" /></span>
             <div class="bubble assistant typing" aria-label="助手正在思考">
               <span></span><span></span><span></span>
             </div>
@@ -458,21 +459,21 @@ onMounted(() => {
           <n-button
             type="primary"
             size="large"
-            round
             :disabled="!canSend"
             :loading="sending"
             @click="send()"
           >
+            <template #icon><AppIcon name="send" :size="15" /></template>
             发送
           </n-button>
         </footer>
       </section>
 
       <aside class="side">
-        <section class="side-card soft-card">
+        <section class="side-card">
           <div class="side-head">
             <h2 class="section-title">对话记录</h2>
-            <span class="muted side-count">{{ conversations.length }}</span>
+            <span class="side-count">{{ conversations.length }}</span>
           </div>
           <div v-if="conversations.length === 0" class="empty-history">
             还没有对话。从右边的问题开始试试。
@@ -492,11 +493,13 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="side-card soft-card">
+        <section class="side-card">
           <h2 class="section-title">能做什么</h2>
           <div class="capability-list">
             <article v-for="item in capabilities" :key="item.title" class="capability">
-              <span class="capability-icon">{{ item.icon }}</span>
+              <span class="capability-icon">
+                <AppIcon :name="item.icon" :size="15" />
+              </span>
               <div>
                 <strong>{{ item.title }}</strong>
                 <p>{{ item.text }}</p>
@@ -505,17 +508,14 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="side-card soft-card">
-          <h2 class="section-title">开发进度</h2>
-          <ul class="roadmap">
-            <li v-for="item in roadmap" :key="item.label" :class="{ done: item.done }">
-              <span class="dot">{{ item.done ? '✓' : '' }}</span>
-              {{ item.label }}
+        <section class="side-card">
+          <h2 class="section-title">使用边界</h2>
+          <ul class="boundaries">
+            <li v-for="item in boundaries" :key="item">
+              <AppIcon name="shield" :size="13" />
+              <span>{{ item }}</span>
             </li>
           </ul>
-          <p class="roadmap-note">
-            下一步：RAG 知识库与引用、评测集扩充与消融实验。
-          </p>
         </section>
       </aside>
     </div>
@@ -539,7 +539,7 @@ onMounted(() => {
 .agent-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.75fr);
-  gap: 18px;
+  gap: 14px;
   align-items: start;
 }
 
@@ -549,6 +549,9 @@ onMounted(() => {
   min-height: 620px;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
 }
 
 .chat-head {
@@ -556,111 +559,128 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 20px;
+  padding: 13px 18px;
   border-bottom: 1px solid var(--pc-line);
 }
 
 .assistant {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
 }
 
 .assistant-avatar {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   place-items: center;
-  border-radius: 14px;
-  background: linear-gradient(140deg, #f7c9b3, #e8835a);
-  font-size: 21px;
+  border: 1px solid #cfdfd8;
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-primary-soft);
+  color: var(--pc-primary);
 }
 
 .assistant strong {
   display: block;
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 650;
 }
 
 .assistant small {
   display: block;
   margin-top: 2px;
-  color: var(--pc-ink-soft);
+  color: var(--pc-ink-faint);
   font-size: 11px;
 }
 
 .status-dot {
-  padding: 5px 11px;
-  border-radius: 999px;
-  background: #edf7ec;
-  color: #4b7a45;
-  font-size: 11px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pc-ok);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.status-mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pc-ok);
 }
 
 .status-dot.busy {
-  background: #fdf5e4;
-  color: #9a7227;
+  color: var(--pc-warn);
+}
+
+.status-dot.busy .status-mark {
+  background: var(--pc-warn);
 }
 
 .chat-body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   overflow-y: auto;
-  padding: 22px 20px;
+  padding: 20px 18px;
+  background: #fbfbf8;
   scroll-behavior: smooth;
 }
 
 .assistant-bubble {
   max-width: 640px;
-  padding: 16px 18px;
-  border-radius: 4px 18px 18px;
-  background: #fdf7f2;
-  border: 1px solid #f4e5da;
+  padding: 14px 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface);
 }
 
 .assistant-bubble p {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.75;
 }
 
 .bubble-note {
   margin-top: 10px !important;
   padding-top: 10px;
-  border-top: 1px dashed #ecd9cb;
+  border-top: 1px solid var(--pc-line);
   color: var(--pc-ink-soft);
-  font-size: 12px !important;
+  font-size: 11.5px !important;
 }
 
 .examples {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 7px;
 }
 
 .examples-label {
-  font-size: 12px;
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
 }
 
 .example-chip {
-  padding: 9px 13px;
-  border: 1px solid #eee3d8;
-  border-radius: 11px;
-  background: #fff;
-  color: #8a7c71;
-  font-size: 13px;
+  padding: 8px 12px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface);
+  color: var(--pc-ink-soft);
+  font-size: 12.5px;
   text-align: left;
   cursor: pointer;
-  transition: 0.16s ease;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease;
 }
 
 .example-chip:hover:not(:disabled) {
-  border-color: #e8b79f;
-  color: #b85f3c;
-  transform: translateY(-1px);
+  border-color: var(--pc-primary);
+  background: var(--pc-primary-soft);
+  color: var(--pc-primary);
 }
 
 .example-chip:disabled {
@@ -671,7 +691,7 @@ onMounted(() => {
 .bubble-row {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
+  gap: 8px;
 }
 
 .bubble-row.user {
@@ -680,29 +700,29 @@ onMounted(() => {
 
 .bubble-avatar {
   display: grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
   margin-top: 2px;
   place-items: center;
-  border-radius: 10px;
-  background: var(--pc-sage-soft);
-  font-size: 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: 5px;
+  background: var(--pc-primary-soft);
+  color: var(--pc-primary);
 }
 
 .bubble {
-  max-width: 78%;
-  padding: 12px 15px;
-  border-radius: 4px 16px 16px;
-  background: #fff;
-  border: 1px solid #f0e6dc;
-  font-size: 14px;
+  max-width: 76%;
+  padding: 11px 14px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface);
+  font-size: 13px;
   line-height: 1.72;
 }
 
 .bubble.user {
-  border-radius: 16px 4px 16px 16px;
-  border-color: transparent;
+  border-color: var(--pc-primary);
   background: var(--pc-primary);
   color: #fff;
 }
@@ -716,8 +736,8 @@ onMounted(() => {
 }
 
 .stream-status {
-  color: var(--pc-ink-soft);
-  font-size: 12px;
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
   animation: pulse 1.4s infinite ease-in-out;
 }
 
@@ -734,52 +754,55 @@ onMounted(() => {
 
 .history-loading {
   padding: 10px 0;
-  color: var(--pc-ink-soft);
-  font-size: 12px;
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
   text-align: center;
 }
 
 .tool-events {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 5px;
+  margin-top: 9px;
   padding-top: 9px;
-  border-top: 1px dashed #f0e4d8;
+  border-top: 1px solid var(--pc-line);
 }
 
 .tool-chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: #f4f8f2;
-  color: #58714f;
-  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--pc-line);
+  border-radius: 4px;
+  background: var(--pc-surface-muted);
+  color: var(--pc-ink-soft);
+  font-size: 10.5px;
   font-weight: 600;
 }
 
 .tool-chip.error {
-  background: #fdf1ee;
-  color: #a85b48;
+  border-color: #e4c7c2;
+  background: var(--pc-danger-soft);
+  color: var(--pc-danger);
 }
 
 .tool-chip.running {
-  background: #fdf5e4;
-  color: #9a7227;
+  border-color: #e6d7bd;
+  background: var(--pc-warn-soft);
+  color: var(--pc-warn);
 }
 
 .tool-chip.running em {
-  color: #b08b4d;
+  color: #a9834f;
 }
 
 .tool-mark {
-  font-size: 10px;
+  font-size: 9.5px;
 }
 
 .tool-chip em {
-  color: #8a9b84;
+  color: var(--pc-ink-faint);
   font-style: normal;
   font-weight: 400;
 }
@@ -789,11 +812,11 @@ onMounted(() => {
 }
 
 .draft-card {
-  margin-top: 12px;
-  padding: 13px 14px;
-  border: 1px solid #efd9ca;
-  border-radius: 13px;
-  background: linear-gradient(150deg, #fffaf6, #fdf3ec);
+  margin-top: 11px;
+  padding: 12px 14px;
+  border: 1px solid #cfdfd8;
+  border-radius: var(--pc-radius-sm);
+  background: #f4f8f6;
 }
 
 .draft-head {
@@ -803,16 +826,18 @@ onMounted(() => {
 }
 
 .draft-head strong {
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 650;
 }
 
 .draft-badge {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #f8e3d7;
-  color: #b05f3f;
+  padding: 1px 7px;
+  border: 1px solid #cfdfd8;
+  border-radius: 4px;
+  background: var(--pc-surface);
+  color: var(--pc-primary);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .draft-grid {
@@ -829,12 +854,14 @@ onMounted(() => {
 }
 
 .draft-grid span {
-  color: var(--pc-ink-soft);
+  color: var(--pc-ink-faint);
   font-size: 10px;
 }
 
 .draft-grid strong {
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .draft-foot {
@@ -842,19 +869,19 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 11px;
   padding-top: 10px;
-  border-top: 1px dashed #eccfbd;
+  border-top: 1px solid #dbe8e2;
 }
 
 .draft-foot span {
-  color: #9a7c6b;
+  color: var(--pc-ink-faint);
   font-size: 10px;
 }
 
 .trace {
-  margin-top: 8px;
-  color: #b3a79d;
+  margin-top: 7px;
+  color: var(--pc-ink-faint);
   font-size: 10px;
   letter-spacing: 0.02em;
 }
@@ -867,14 +894,14 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 15px 17px;
+  padding: 14px 16px;
 }
 
 .typing span {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: #d6b8a6;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pc-line-strong);
   animation: typing 1.2s infinite ease-in-out;
 }
 
@@ -903,10 +930,10 @@ onMounted(() => {
 .chat-input {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  padding: 16px 20px;
+  gap: 8px;
+  padding: 12px 16px;
   border-top: 1px solid var(--pc-line);
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--pc-surface);
 }
 
 .chat-input :deep(textarea) {
@@ -916,11 +943,14 @@ onMounted(() => {
 .side {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .side-card {
-  padding: 20px;
+  padding: 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: var(--pc-surface);
 }
 
 .side-head {
@@ -929,27 +959,36 @@ onMounted(() => {
   justify-content: space-between;
 }
 
+.section-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
 .side-count {
+  color: var(--pc-ink-faint);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .empty-history {
-  margin-top: 14px;
+  margin-top: 12px;
   padding: 16px 12px;
-  border: 1px dashed #e8ddd2;
-  border-radius: 12px;
-  color: #9a8f85;
-  font-size: 12px;
+  border: 1px dashed var(--pc-line-strong);
+  border-radius: var(--pc-radius-sm);
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
   line-height: 1.6;
   text-align: center;
 }
 
 .conversation-list {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 12px;
   max-height: 222px;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 10px;
   overflow-y: auto;
 }
 
@@ -958,25 +997,29 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 9px 11px;
+  padding: 8px 9px;
   border: 0;
-  border-radius: 10px;
+  border-left: 2px solid transparent;
+  border-radius: 4px;
   background: transparent;
   color: var(--pc-ink-soft);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
-  transition: 0.16s ease;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
 }
 
 .conversation-item:hover:not(:disabled) {
-  background: #f7f1ea;
+  background: var(--pc-surface-muted);
   color: var(--pc-ink);
 }
 
 .conversation-item.active {
+  border-left-color: var(--pc-primary);
   background: var(--pc-primary-soft);
-  color: #b85f3c;
+  color: var(--pc-primary);
 }
 
 .conversation-item:disabled {
@@ -994,15 +1037,15 @@ onMounted(() => {
 
 .conversation-item small {
   flex: 0 0 auto;
-  color: #ac9f94;
+  color: var(--pc-ink-faint);
   font-size: 10px;
 }
 
 .capability-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-top: 16px;
+  gap: 13px;
+  margin-top: 14px;
 }
 
 .capability {
@@ -1013,72 +1056,50 @@ onMounted(() => {
 
 .capability-icon {
   display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  margin-top: 1px;
   place-items: center;
-  border-radius: 11px;
-  background: var(--pc-sage-soft);
-  font-size: 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: 5px;
+  background: var(--pc-surface-muted);
+  color: var(--pc-primary);
 }
 
 .capability strong {
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 650;
 }
 
 .capability p {
   margin: 3px 0 0;
-  color: var(--pc-ink-soft);
-  font-size: 12px;
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
   line-height: 1.6;
 }
 
-.roadmap {
+.boundaries {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin: 16px 0 0;
+  margin: 14px 0 0;
   padding: 0;
   list-style: none;
 }
 
-.roadmap li {
+.boundaries li {
   display: flex;
-  align-items: center;
-  gap: 9px;
+  align-items: flex-start;
+  gap: 8px;
   color: var(--pc-ink-soft);
-  font-size: 12px;
-}
-
-.roadmap li.done {
-  color: var(--pc-ink);
-  font-weight: 600;
-}
-
-.dot {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
-  place-items: center;
-  border: 1px solid #e2d7cc;
-  border-radius: 999px;
-  color: #fff;
-  font-size: 10px;
-}
-
-.roadmap li.done .dot {
-  border-color: var(--pc-sage);
-  background: var(--pc-sage);
-}
-
-.roadmap-note {
-  margin: 14px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid #f1e8df;
-  color: #9a8f85;
-  font-size: 11px;
+  font-size: 11.5px;
   line-height: 1.6;
+}
+
+.boundaries svg {
+  margin-top: 2px;
+  color: var(--pc-primary);
 }
 
 @media (max-width: 1050px) {
