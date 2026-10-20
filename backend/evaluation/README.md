@@ -20,6 +20,9 @@ $env:PYTHONIOENCODING = 'utf-8'
 
 # 只跑指定用例，保留评测库排查
 .\.venv\Scripts\python.exe evaluation\runner.py --case draft-001 --keep-db
+
+# 用 LangGraph 适配层跑同一套用例（需先安装 requirements-agent.txt）
+.\.venv\Scripts\python.exe evaluation\runner.py --engine langgraph --case draft-001
 ```
 
 ## 数据隔离
@@ -67,7 +70,19 @@ $env:PYTHONIOENCODING = 'utf-8'
 | P95 延迟 | 单次 `/agent/chat` 端到端耗时 |
 | token 成本 | 按 trace 汇总输入 / 输出 token |
 
-报告写入 `evaluation/reports/eval_<时间戳>.json|.csv`，该目录不入库。
+报告写入 `evaluation/reports/eval_<时间戳>_<variant>.json|.csv`，该目录不入库；
+用 `--engine langgraph` 时文件名追加 `_langgraph`，JSON 里同时记录 `engine` 与 `variant`。
+
+## 调度引擎
+
+| 引擎 | 说明 |
+| --- | --- |
+| `explicit` | 默认。`app/agent/runtime.py` 的显式工具调用循环，生产主实现 |
+| `langgraph` | `app/agent/langgraph_runtime.py` 的 `StateGraph` 适配层，仅用于对照实验 |
+
+`--engine` 只影响调度；工具、提示词、权限、RAG、持久化和 SSE 事件完全复用。
+6 个评测变体在两种引擎下都生效。两种实现的差异与实测数据见
+[docs/architecture.md](../../docs/architecture.md#6-调度引擎选型)。
 
 ## 增加用例
 

@@ -2,7 +2,7 @@
 
 选择直接走 OpenAI 兼容的 /chat/completions，而不是引入完整框架：
 工具调用、循环、trace 都是显式的，方便测试和写论文。
-后续如果要换 LangGraph，只需要替换 run_agent 的调度部分。
+LangGraph 对照适配层见 app/agent/langgraph_runtime.py；生产默认仍用本模块。
 """
 
 import asyncio

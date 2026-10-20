@@ -12,7 +12,7 @@
 | 数据库 | PostgreSQL 16 + pgvector |
 | 缓存/限流 | Redis 7（可选，未启动时退回进程内存） |
 | 鉴权 | JWT + bcrypt，三角色：宠物主 / 寄养员 / 管理员 |
-| Agent | 显式工具调用循环 + 步骤级 SSE（httpx + OpenAI 兼容接口），后续可替换为 LangGraph |
+| Agent | 显式工具调用循环 + 步骤级 SSE（httpx + OpenAI 兼容接口）；附 LangGraph 对照适配层 |
 | RAG | fastembed + bge-small-zh-v1.5（512 维），向量 + 词法混合检索；生产保留 pgvector 路径 |
 | 定时 | APScheduler（单进程） |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
@@ -155,6 +155,15 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 
 字段说明和扩展示例见 [backend/evaluation/README.md](backend/evaluation/README.md)。
 
+调度引擎默认是显式循环；LangGraph 适配层用于对照实验（先装 `requirements-agent.txt`）：
+
+```powershell
+.\.venv\Scripts\python.exe evaluation\runner.py --engine langgraph --case pets-001 --case knowledge-001
+```
+
+报告文件名和 JSON 会带引擎标识。主链路为什么选显式循环、两种实现的差异，
+见 [docs/architecture.md](docs/architecture.md#6-调度引擎选型)。
+
 ## 6. 环境变量
 
 真实密钥只放在 `.env`，不进仓库。模板见 `backend/.env.example` 和根目录 `.env.example`。
@@ -166,6 +175,7 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 | `LLM_API_KEY` | DeepSeek / OpenAI 兼容接口密钥 |
 | `LLM_MODEL` | 当前使用 `deepseek-flash` |
 | `LLM_BASE_URL` | `https://api.deepseek.com` |
+| `AGENT_ENGINE` | `explicit`（默认）/ `langgraph`（对照实验） |
 | `REDIS_URL` | 留空时使用进程内限流 |
 | `RAG_ENABLED` | 是否启用知识库检索，默认 `true` |
 | `RAG_EMBEDDING_MODEL` | 默认 `BAAI/bge-small-zh-v1.5` |
@@ -193,6 +203,7 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 - [ ] Docker Compose 启动验证（本机 Docker daemon 未运行）
 - [ ] 通知中心
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
+- [x] LangGraph 对照适配层（`AGENT_ENGINE` / 评测 `--engine`，生产默认显式循环）
 
 ## 8. 说明
 

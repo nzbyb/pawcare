@@ -7,7 +7,8 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.agent.runtime import AgentRunResult, LLMClient, get_llm, run_agent
+from app.agent.engine import run_agent
+from app.agent.runtime import AgentRunResult, LLMClient, get_llm
 from app.common.exceptions import BusinessException
 from app.models.agent import AgentConversation, AgentMessage
 from app.models.boarding import BoardingDraft

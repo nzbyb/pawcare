@@ -1,7 +1,4 @@
-# Agent / RAG 依赖。先装 requirements.txt，再装本文件。
-# sentence-transformers 会带 torch，第一次安装较慢；暂时不跑本地 embedding 时可先跳过。
+# Agent 对照实验的可选依赖。生产主链路只用 requirements.txt。
+# 安装：.venv\Scripts\pip.exe install -r requirements-agent.txt
+# 启用：AGENT_ENGINE=langgraph（不设置时走显式循环）
 langgraph==1.2.13
-langchain-openai==1.6.7
-langchain-core==1.6.6
-openai==3.24.0
-sentence-transformers==6.1.0

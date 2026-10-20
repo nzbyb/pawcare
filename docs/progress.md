@@ -344,3 +344,48 @@
 2. 通知中心（可选）。
 3. 多轮澄清评测：把单轮 `clarify` 用例扩展成两轮（追问后补全信息）。
 4. 论文阶段补充引用忠实度与拒答准确率的细粒度统计。
+
+## 2026-10-20 · 第 9 天
+
+### 完成
+
+- 保留显式循环作为生产主实现，新增轻量 LangGraph 对照适配层：
+  - `app/agent/langgraph_runtime.py`：`StateGraph` 三个节点 `agent` / `tools` / `finish`，
+    条件边在“继续调工具”和“结束”之间选择。
+  - 复用现有 `OpenAICompatibleClient`、8 个工具、权限校验、RAG、持久化与 SSE 事件，
+    没有复制业务逻辑；不引入 checkpointer，数据库仍是会话历史的唯一事实源。
+  - 适配层在调用时读取 `runtime` 模块属性，因此 6 个评测变体对两种引擎都生效。
+- 引擎切换：
+  - `app/config.py` 增加 `AGENT_ENGINE`，默认 `explicit`。
+  - `app/agent/engine.py` 懒加载 LangGraph；未安装时记录日志并回退到显式循环。
+  - `agent_service` 改为调用引擎分发器，接口与流式行为不变。
+- 评测支持 `--engine {explicit,langgraph}`；报告名和 JSON 记录引擎，避免报告互相覆盖。
+- 清理 `requirements-agent.txt`：只保留 `langgraph==1.2.13`，删除未使用的
+  LangChain-OpenAI / sentence-transformers 等陈旧依赖，并注明生产链路不需要它。
+- 测试新增 `tests/test_agent_langgraph.py`：工具循环、超轮次停止、模型失败兜底。
+- README、架构文档、评测 README 补充引擎选型、差异数据与运行方式。
+
+### 验证
+
+- `pytest`：67 passed（新增 3 条 LangGraph 行为对齐测试）。
+- 同一套 5 条用例（`pets-001`、`draft-001`、`knowledge-001`、`perm-001`、`refusal-001`）：
+  - 显式循环 5/5，平均 4.0s，P95 5.5s，25,766 tokens；
+  - LangGraph 5/5，平均 4.5s，P95 7.8s，29,879 tokens；
+  - 差异主要来自模型工具路径不同（2 条用例多调用工具），不是适配层开销。
+- 隔离模型延迟的微基准（脚本化 `FakeLLM`，固定两步工具循环，各 25 次）：
+  - 显式循环平均 4.50ms，P95 4.99ms；
+  - LangGraph 平均 12.04ms，P95 10.91ms；
+  - 编排开销约 +7.5ms/轮，相对真实模型 3–5s 可忽略。
+
+### 结论
+
+- 生产继续用显式循环：代码量更小、失败定位直接、无额外依赖。
+- LangGraph 适配层验证了“调度可替换”，并为论文提供同业务能力下的框架对照；
+  后续若需要 checkpoint、复杂分支或可视化编排，再以它为起点引入。
+
+### 下一步
+
+1. 前端 UI 改版：降低模板化观感，先调研 2–3 个成熟开源后台 / 宠物管理项目，
+   再调整布局、配色、字号层级和组件密度；不改动 Agent / 评测主链路。
+2. 网络与 Docker 可用时执行 `docker compose up -d --build`，验证迁移、pgvector 检索和前端链路。
+3. 通知中心（可选）。

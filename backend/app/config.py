@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""
 
     AI_MAX_CONCURRENCY: int = 3
+    # 主实现是显式循环；langgraph 仅用于对照实验，需额外安装依赖。
+    AGENT_ENGINE: str = "explicit"
     AGENT_MAX_TOOL_CALLS: int = 6
     AGENT_TIMEOUT_SECONDS: int = 30
     LLM_MAX_TOKENS: int = 1024

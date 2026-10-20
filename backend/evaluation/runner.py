@@ -459,17 +459,21 @@ def write_report(
     model: str,
     report_dir: Path,
     variant: str = "full",
+    engine: str = "explicit",
 ) -> tuple[Path, Path]:
     report_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = report_dir / f"eval_{stamp}_{variant}.json"
-    csv_path = report_dir / f"eval_{stamp}_{variant}.csv"
+    # explicit 保持原文件名，langgraph 加后缀，避免两种引擎的报告互相覆盖。
+    suffix = "" if engine == "explicit" else f"_{engine}"
+    json_path = report_dir / f"eval_{stamp}_{variant}{suffix}.json"
+    csv_path = report_dir / f"eval_{stamp}_{variant}{suffix}.csv"
 
     payload = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "model": model,
         "variant": variant,
         "variant_description": describe(variant),
+        "engine": engine,
         "metrics": metrics,
         "results": [item.to_dict() for item in results],
     }
@@ -573,6 +577,12 @@ def parse_args() -> argparse.Namespace:
         default="full",
         help="评测变体：baseline 或消融实验（默认 full）",
     )
+    parser.add_argument(
+        "--engine",
+        choices=("explicit", "langgraph"),
+        default="explicit",
+        help="Agent 调度引擎：显式循环（默认）或 LangGraph 适配层",
+    )
     return parser.parse_args()
 
 
@@ -581,6 +591,16 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     args = parse_args()
+    if args.engine == "langgraph":
+        try:
+            import langgraph  # noqa: F401
+        except ImportError:
+            print(
+                "未安装 langgraph，无法使用 --engine langgraph。"
+                "请先执行：.venv\\Scripts\\pip.exe install -r requirements-agent.txt"
+            )
+            return 2
+
     try:
         cases = load_cases(Path(args.cases))
     except CaseError as exc:
@@ -619,6 +639,8 @@ def main() -> int:
     os.chdir(BACKEND_DIR)
     os.environ["DATABASE_URL"] = f"sqlite:///{EVAL_DB.as_posix()}"
     os.environ["REDIS_URL"] = ""
+    # 必须在导入 app.config 之前设置；settings 在模块导入时实例化。
+    os.environ["AGENT_ENGINE"] = args.engine
 
     needs_seed = prepare_database(args.keep_db)
 
@@ -648,6 +670,7 @@ def main() -> int:
     apply_variant(args.variant)
     if args.variant != "full":
         print(f"评测变体：{args.variant}（{describe(args.variant)}）")
+    print(f"调度引擎：{args.engine}")
 
     results: list[CaseResult] = []
     with TestClient(app) as client:
@@ -687,6 +710,7 @@ def main() -> int:
             settings.LLM_MODEL,
             Path(args.report_dir),
             args.variant,
+            args.engine,
         )
         print(f"报告：{json_path}")
         print(f"      {csv_path}")

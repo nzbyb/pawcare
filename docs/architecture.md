@@ -10,7 +10,7 @@ FastAPI + JWT + RBAC
         │
         ├── 业务服务：Pet / Health / Boarding / Reminder / Knowledge
         │
-        └── Agent Runtime（显式工具调用循环，后续可替换为 LangGraph）
+        └── Agent Runtime（显式工具调用循环为默认；LangGraph 为可选适配层）
               ├── Tool Registry
               ├── Permission Guard
               ├── Draft Manager
@@ -140,7 +140,82 @@ POST /api/boarding/drafts/{id}/confirm
 
 排他约束与应用层档期校验形成双层保护：应用层负责友好报错，数据库层兜住并发确认。
 
-## 6. 评测（论文阶段）
+## 6. 调度引擎选型
+
+### 6.1 主实现：显式工具调用循环
+
+生产与所有演示路径都走 `app/agent/runtime.py` 的显式循环：
+
+```text
+messages = system + history
+loop:
+    LLM.complete(messages, TOOLS)
+    if tool_calls and 未超过轮次上限:
+        持久化 assistant(tool_calls)
+        for call in tool_calls:
+            execute_tool(...) → 持久化 tool message + trace
+    else:
+        持久化最终回复，返回
+```
+
+选择它的原因：
+
+- **可控**：轮次上限、30 秒超时、失败兜底、SSE 事件顺序都在一个函数里，安全边界不依赖框架默认行为。
+- **可调试**：一次请求就是一条 Python 调用栈，异常直接定位到循环或工具行；trace 表和 SSE 事件与代码一一对应。
+- **依赖少**：生产镜像只装 `requirements.txt`，不需要 LangChain 生态；模型接口就是一个 OpenAI 兼容的 `httpx` 请求。
+- **可测试**：测试用脚本化 `FakeLLM` 直接驱动循环，不需要构造图状态或 checkpoint。
+
+### 6.2 对照适配层：LangGraph
+
+`app/agent/langgraph_runtime.py` 保留同一套工具、提示词、持久化和事件，只把调度换成 `StateGraph`：
+
+```text
+START → agent ──(有 tool_calls)──→ tools ──→ agent
+           └──(无 tool_calls / 出错 / 超轮次)──→ finish → END
+```
+
+- `agent`：调用模型、发 `llm_start/llm_end`、持久化 tool-call 消息。
+- `tools`：逐个执行工具、写 `agent_messages` 与 `agent_tool_calls`、发 `tool_start/tool_end`、记录草稿 ID。
+- `finish`：持久化最终回复、发 `assistant` 事件。
+- 通过 `AGENT_ENGINE=langgraph` 切换；`app/agent/engine.py` 懒加载，未安装 LangGraph 时自动回退，生产路径不受影响。
+- 不引入 checkpointer：会话历史仍以数据库为唯一事实源，避免两套状态。
+- 评测的 6 个变体对两种引擎都生效，因为适配层在调用时读取 `runtime` 模块属性，
+  而不是复制 `TOOL_DEFINITIONS` / `execute_tool` / `build_system_prompt`。
+
+### 6.3 实测差异
+
+同一套 5 条用例（`pets-001` / `draft-001` / `knowledge-001` / `perm-001` / `refusal-001`），
+`deepseek-flash`，两个引擎都是 5/5 通过：
+
+| 维度 | 显式循环 | LangGraph 适配层 |
+| --- | --- | --- |
+| 端到端平均延迟 | 4.0s | 4.5s |
+| P95 延迟 | 5.5s | 7.8s |
+| tokens（5 条合计） | 25,766 | 29,879 |
+| 工具路径 | — | 其中 2 条多调用了工具 |
+
+这组差异主要来自模型每次选择不同（`refusal-001`、`knowledge-001` 多了一轮工具），
+不能直接归因于适配层。为隔离调度开销，另用脚本化 `FakeLLM` 跑固定两步工具循环，
+每边 25 次（SQLite、无网络）：
+
+| 实现 | 平均 | 中位数 | P95 |
+| --- | --- | --- | --- |
+| 显式循环 | 4.50ms | 4.47ms | 4.99ms |
+| LangGraph | 12.04ms | 10.37ms | 10.91ms |
+
+即适配层每次多约 **7.5ms** 编排开销，相对 3–5 秒的模型延迟可以忽略。
+
+### 6.4 结论
+
+- 生产继续使用显式循环：代码量更小、失败定位更直接、没有额外运行时依赖。
+- LangGraph 适配层用于验证“调度可替换”，并在论文里提供同一业务能力下的框架对照，
+  而不是为了关键词把主链路重写。
+- 如果后续需要 checkpoint 恢复、复杂分支或可视化编排，再以适配层为起点引入 LangGraph。
+
+适配层与显式循环的行为对齐由 `backend/tests/test_agent_langgraph.py` 覆盖
+（工具循环、超轮次停止、模型失败兜底）。
+
+## 7. 评测（论文阶段）
 
 - 当前 harness：`backend/evaluation/`，YAML 用例 + 独立 SQLite 副本 + 真实模型 + JSON / CSV 报告。
 - 主评测集 91 条，覆盖宠物、健康、提醒、笼舍空档、草稿、订单、日报、知识检索、
