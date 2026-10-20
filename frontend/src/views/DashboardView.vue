@@ -4,10 +4,14 @@ import { useRouter } from 'vue-router'
 import { NButton, NEmpty, NSpin } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
+import PetFormModal from '@/components/PetFormModal.vue'
 import { listHealthRecords, listReminders } from '@/api/health'
 import { listPets } from '@/api/pets'
 import type { Pet, Reminder } from '@/types'
-import { daysUntil, dueLabel, formatDate } from '@/utils/format'
+import { daysUntil, dueLabel, formatDate, speciesLabel } from '@/utils/format'
+
+/** 到期前 7 天视为「即将到期」，与提醒列表的橙色标记保持一致。 */
+const SOON_DAYS = 7
 
 interface ReminderRow {
   reminder: Reminder
@@ -20,6 +24,9 @@ const pets = ref<Pet[]>([])
 const reminderRows = ref<ReminderRow[]>([])
 const healthRecordCount = ref(0)
 const loading = ref(true)
+
+const showPetModal = ref(false)
+const editingPet = ref<Pet | null>(null)
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -49,13 +56,15 @@ const stats = computed(() => [
     value: pets.value.length,
     hint: '已建档',
     tone: 'plain',
+    icon: 'paw',
   },
   {
     key: 'health',
     label: '健康记录',
     value: healthRecordCount.value,
     hint: '疫苗 / 驱虫 / 就诊',
-    tone: 'plain',
+    tone: 'ok',
+    icon: 'clipboard',
   },
   {
     key: 'reminders',
@@ -63,6 +72,7 @@ const stats = computed(() => [
     value: reminderRows.value.length,
     hint: '按到期日排序',
     tone: 'warn',
+    icon: 'bell',
   },
   {
     key: 'overdue',
@@ -70,8 +80,40 @@ const stats = computed(() => [
     value: overdueCount.value,
     hint: overdueCount.value ? '需要尽快处理' : '没有逾期',
     tone: overdueCount.value ? 'danger' : 'plain',
+    icon: 'clock',
   },
 ])
+
+function reminderDays(row: ReminderRow): number {
+  return daysUntil(row.reminder.due_date)
+}
+
+/** normal = 7 天以上，soon = 7 天内到期，overdue = 已过期。 */
+function reminderState(row: ReminderRow): 'normal' | 'soon' | 'overdue' {
+  const days = reminderDays(row)
+  if (days < 0) return 'overdue'
+  if (days <= SOON_DAYS) return 'soon'
+  return 'normal'
+}
+
+function reminderStateLabel(row: ReminderRow): string {
+  const state = reminderState(row)
+  if (state === 'overdue') return '已过期'
+  if (state === 'soon') return '即将到期'
+  return ''
+}
+
+function openPetEdit(pet: Pet): void {
+  editingPet.value = pet
+  showPetModal.value = true
+}
+
+function onPetSaved(pet: Pet): void {
+  pets.value = pets.value.map((item) => (item.id === pet.id ? pet : item))
+  reminderRows.value = reminderRows.value.map((row) =>
+    row.pet.id === pet.id ? { ...row, pet } : row,
+  )
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -125,8 +167,8 @@ onMounted(load)
         <span class="eyebrow">{{ todayText }} · {{ greeting }}</span>
         <h1>工作台</h1>
         <p>
-          当前有 {{ pets.length }} 只宠物、{{ reminderRows.length }} 条提醒待处理。
-          需要查档案或安排寄养时，可以直接交给助手。
+          当前有 {{ pets.length }} 只宠物、{{ reminderRows.length }} 条提醒待处理，
+          档案、提醒和预约状态都可以在这里统一查看。
         </p>
       </div>
       <div class="overview-actions">
@@ -149,10 +191,12 @@ onMounted(load)
           class="metric"
           :class="`tone-${item.tone}`"
         >
-          <span class="metric-label">
-            <span class="metric-dot" />
-            {{ item.label }}
-          </span>
+          <div class="metric-head">
+            <span class="metric-label">{{ item.label }}</span>
+            <span class="metric-icon">
+              <AppIcon :name="item.icon" :size="16" />
+            </span>
+          </div>
           <strong class="metric-value">{{ item.value }}</strong>
           <span class="metric-hint">{{ item.hint }}</span>
         </article>
@@ -169,28 +213,57 @@ onMounted(load)
           </header>
 
           <div v-if="reminderRows.length" class="reminder-list">
-            <button
+            <div
               v-for="row in reminderRows.slice(0, 6)"
               :key="row.reminder.id"
-              type="button"
               class="reminder-row"
+              :class="`row-${reminderState(row)}`"
+              role="button"
+              tabindex="0"
               @click="router.push(`/pets/${row.pet.id}`)"
+              @keydown.enter.prevent="router.push(`/pets/${row.pet.id}`)"
+              @keydown.space.prevent="router.push(`/pets/${row.pet.id}`)"
             >
               <span class="date-badge">
                 <strong>{{ formatDate(row.reminder.due_date).slice(8) }}</strong>
                 <small>{{ formatDate(row.reminder.due_date).slice(0, 7) }}</small>
               </span>
               <span class="reminder-main">
-                <strong>{{ row.reminder.title }}</strong>
+                <span class="reminder-title">
+                  <strong>{{ row.reminder.title }}</strong>
+                  <span
+                    v-if="reminderStateLabel(row)"
+                    class="status-tag"
+                    :class="reminderState(row) === 'overdue' ? 'red' : 'amber'"
+                  >
+                    {{ reminderStateLabel(row) }}
+                  </span>
+                </span>
                 <small>{{ row.pet.name }} · {{ row.reminder.reminder_type }}</small>
               </span>
-              <span
-                class="pill"
-                :class="daysUntil(row.reminder.due_date) < 0 ? 'red' : 'sage'"
-              >
-                {{ dueLabel(row.reminder.due_date) }}
+              <span class="reminder-side">
+                <span
+                  class="pill"
+                  :class="
+                    reminderState(row) === 'overdue'
+                      ? 'red'
+                      : reminderState(row) === 'soon'
+                        ? 'amber'
+                        : 'sage'
+                  "
+                >
+                  {{ dueLabel(row.reminder.due_date) }}
+                </span>
+                <n-button
+                  size="tiny"
+                  quaternary
+                  class="reminder-action"
+                  @click.stop="router.push(`/pets/${row.pet.id}`)"
+                >
+                  查看详情
+                </n-button>
               </span>
-            </button>
+            </div>
           </div>
 
           <n-empty
@@ -212,19 +285,30 @@ onMounted(load)
           </header>
 
           <div v-if="pets.length" class="pet-mini-list">
-            <router-link
-              v-for="pet in pets.slice(0, 5)"
-              :key="pet.id"
-              :to="`/pets/${pet.id}`"
-              class="pet-mini"
-            >
-              <span class="mini-avatar">{{ pet.name.slice(0, 1) }}</span>
-              <span class="mini-main">
-                <strong>{{ pet.name }}</strong>
-                <small>{{ pet.breed || (pet.species === 'cat' ? '猫咪' : '狗狗') }}</small>
+            <div v-for="pet in pets.slice(0, 5)" :key="pet.id" class="pet-mini">
+              <router-link :to="`/pets/${pet.id}`" class="pet-mini-link">
+                <span class="mini-avatar">{{ pet.name.slice(0, 1) }}</span>
+                <span class="mini-main">
+                  <span class="mini-title">
+                    <strong>{{ pet.name }}</strong>
+                    <span class="species-chip">{{ speciesLabel(pet.species) }}</span>
+                  </span>
+                  <small>{{ pet.breed || '品种未填写' }}</small>
+                </span>
+              </router-link>
+              <span class="mini-actions">
+                <n-button size="tiny" quaternary @click="openPetEdit(pet)">
+                  编辑
+                </n-button>
+                <n-button
+                  size="tiny"
+                  quaternary
+                  @click="router.push(`/pets/${pet.id}`)"
+                >
+                  查看档案
+                </n-button>
               </span>
-              <AppIcon name="chevronRight" :size="15" class="mini-arrow" />
-            </router-link>
+            </div>
           </div>
 
           <n-empty
@@ -241,23 +325,26 @@ onMounted(load)
         </article>
       </section>
 
-      <section class="assistant-note fade-up delay-2">
-        <div class="assistant-note-head">
-          <span class="assistant-icon"><AppIcon name="chat" :size="16" /></span>
-          <div>
-            <h2>让助手把信息串起来</h2>
-            <p>
-              “豆豆下个月要寄养五天，帮我看看有没有合适的笼舍。”
-              助手会先查档案、查空档，再生成一份需要你确认的预约草稿。
-            </p>
-          </div>
+      <section class="record-note fade-up delay-2">
+        <div class="record-note-head">
+          <span class="record-icon"><AppIcon name="clipboard" :size="16" /></span>
+          <p>
+            自动跟踪宠物疫苗、洗护、体检周期，到期自动提醒，
+            方便统一管理宠物健康档案与预约记录。
+          </p>
         </div>
-        <n-button type="primary" secondary @click="router.push('/agent')">
-          打开智能助手
+        <n-button secondary @click="router.push('/pets')">
+          查看宠物档案
           <template #icon><AppIcon name="arrowRight" :size="15" /></template>
         </n-button>
       </section>
     </n-spin>
+
+    <PetFormModal
+      v-model:show="showPetModal"
+      :pet="editingPet"
+      @saved="onPetSaved"
+    />
   </div>
 </template>
 
@@ -311,33 +398,78 @@ onMounted(load)
 }
 
 .metric {
-  padding: 15px 16px 14px;
+  padding: 14px 16px 14px;
   border: 1px solid var(--pc-line);
   border-radius: var(--pc-radius);
   background: var(--pc-surface);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.metric:hover {
+  transform: translateY(-2px);
+  border-color: var(--pc-line-strong);
+  box-shadow: 0 6px 18px rgba(28, 29, 26, 0.07);
+}
+
+.metric-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .metric-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   color: var(--pc-ink-soft);
   font-size: 12px;
 }
 
-.metric-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--pc-line-strong);
+.metric-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface-muted);
+  color: var(--pc-ink-soft);
 }
 
-.tone-warn .metric-dot {
-  background: var(--pc-warn);
+.tone-plain .metric-icon {
+  background: var(--pc-primary-soft);
+  color: var(--pc-primary);
 }
 
-.tone-danger .metric-dot {
-  background: var(--pc-danger);
+.tone-ok .metric-label,
+.tone-ok .metric-value {
+  color: var(--pc-ok);
+}
+
+.tone-ok .metric-icon {
+  background: var(--pc-ok-soft);
+  color: var(--pc-ok);
+}
+
+.tone-warn .metric-label,
+.tone-warn .metric-value {
+  color: var(--pc-warn);
+}
+
+.tone-warn .metric-icon {
+  background: var(--pc-warn-soft);
+  color: var(--pc-warn);
+}
+
+.tone-danger .metric-label,
+.tone-danger .metric-value {
+  color: var(--pc-danger);
+}
+
+.tone-danger .metric-icon {
+  background: var(--pc-danger-soft);
+  color: var(--pc-danger);
 }
 
 .metric-value {
@@ -348,10 +480,6 @@ onMounted(load)
   letter-spacing: -0.03em;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
-}
-
-.tone-danger .metric-value {
-  color: var(--pc-danger);
 }
 
 .metric-hint {
@@ -407,15 +535,17 @@ onMounted(load)
   gap: 12px;
   width: 100%;
   padding: 11px 10px;
-  border: 0;
   border-bottom: 1px solid #efefe9;
   border-radius: 5px;
   background: transparent;
   color: inherit;
-  font: inherit;
   text-align: left;
   cursor: pointer;
   transition: background 0.14s ease;
+}
+
+.reminder-row {
+  outline: none;
 }
 
 .reminder-row:last-child,
@@ -426,6 +556,75 @@ onMounted(load)
 .reminder-row:hover,
 .pet-mini:hover {
   background: var(--pc-surface-muted);
+}
+
+.reminder-row:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--pc-primary);
+}
+
+.row-soon .reminder-main strong,
+.row-soon .date-badge strong {
+  color: var(--pc-warn);
+}
+
+.row-overdue .reminder-main strong,
+.row-overdue .date-badge strong {
+  color: var(--pc-danger);
+}
+
+.row-soon .date-badge {
+  border-color: #e8d8bf;
+  background: var(--pc-warn-soft);
+}
+
+.row-overdue .date-badge {
+  border-color: #e8cbc7;
+  background: var(--pc-danger-soft);
+}
+
+.reminder-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.status-tag.amber {
+  background: var(--pc-warn-soft);
+  color: var(--pc-warn);
+}
+
+.status-tag.red {
+  background: var(--pc-danger-soft);
+  color: var(--pc-danger);
+}
+
+.reminder-side {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.reminder-action {
+  --n-height: 24px;
+  --n-padding: 0 4px;
+  --n-font-size: 11.5px;
+  color: var(--pc-ink-soft);
+}
+
+.reminder-action:hover {
+  color: var(--pc-primary);
 }
 
 .date-badge {
@@ -462,11 +661,13 @@ onMounted(load)
 }
 
 .reminder-main strong {
+  min-width: 0;
   overflow: hidden;
   font-size: 13.5px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 0.14s ease;
 }
 
 .reminder-main small {
@@ -489,6 +690,15 @@ onMounted(load)
   font-weight: 700;
 }
 
+.pet-mini-link {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+}
+
 .mini-main {
   display: flex;
   min-width: 0;
@@ -496,9 +706,29 @@ onMounted(load)
   flex-direction: column;
 }
 
+.mini-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 .mini-main strong {
+  overflow: hidden;
   font-size: 13.5px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.species-chip {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid var(--pc-line);
+  border-radius: 3px;
+  color: var(--pc-ink-faint);
+  font-size: 10px;
+  line-height: 1.6;
 }
 
 .mini-main small {
@@ -507,29 +737,44 @@ onMounted(load)
   font-size: 11.5px;
 }
 
-.mini-arrow {
-  color: var(--pc-ink-faint);
+.mini-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
 }
 
-.assistant-note {
+.mini-actions :deep(.n-button) {
+  --n-height: 24px;
+  --n-padding: 0 6px;
+  --n-font-size: 11.5px;
+  color: var(--pc-ink-soft);
+}
+
+.mini-actions :deep(.n-button:hover) {
+  color: var(--pc-primary);
+}
+
+.record-note {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   margin-top: 14px;
-  padding: 18px 20px;
+  padding: 16px 20px;
   border: 1px solid #cfdfd8;
   border-radius: var(--pc-radius);
   background: #f1f6f3;
 }
 
-.assistant-note-head {
+.record-note-head {
   display: flex;
-  align-items: flex-start;
+  min-width: 0;
+  align-items: center;
   gap: 12px;
 }
 
-.assistant-icon {
+.record-icon {
   display: grid;
   width: 32px;
   height: 32px;
@@ -540,15 +785,9 @@ onMounted(load)
   color: #fff;
 }
 
-.assistant-note h2 {
+.record-note p {
+  max-width: 760px;
   margin: 0;
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.assistant-note p {
-  max-width: 720px;
-  margin: 4px 0 0;
   color: var(--pc-ink-soft);
   font-size: 12.5px;
   line-height: 1.65;
@@ -570,9 +809,10 @@ onMounted(load)
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .assistant-note {
+  .record-note {
     align-items: flex-start;
     flex-direction: column;
+    gap: 12px;
   }
 }
 
