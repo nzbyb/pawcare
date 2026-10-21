@@ -53,6 +53,12 @@ const router = createRouter({
           component: () => import('@/views/AgentView.vue'),
           meta: { title: '智能助手' },
         },
+        {
+          path: 'profile',
+          name: 'profile',
+          component: () => import('@/views/ProfileView.vue'),
+          meta: { title: '个人中心' },
+        },
       ],
     },
     {

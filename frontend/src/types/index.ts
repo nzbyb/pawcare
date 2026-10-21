@@ -7,7 +7,12 @@ export interface User {
   role: UserRole
   email?: string | null
   phone?: string | null
+  email_verified_at?: string | null
+  phone_verified_at?: string | null
   status: number
+  notify_health: boolean
+  notify_order: boolean
+  notify_system: boolean
   create_time?: string | null
 }
 

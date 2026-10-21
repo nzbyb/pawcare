@@ -13,7 +13,12 @@ from app.schemas.auth import (
     RegisterRequest,
     ResetPasswordRequest,
 )
-from app.schemas.user import ChangePasswordRequest, UserResponse
+from app.schemas.user import (
+    ChangePasswordRequest,
+    NotificationPrefsUpdate,
+    ProfileUpdate,
+    UserResponse,
+)
 from app.services import verification_service
 from app.utils.jwt import create_access_token
 from app.utils.password import hash_password, verify_password
@@ -138,3 +143,61 @@ def change_password(
     db.commit()
     db.refresh(user)
     return create_access_token(user.id, user.token_version)
+
+
+def update_profile(db: Session, user: User, data: ProfileUpdate) -> User:
+    nickname = data.nickname.strip()
+    if not nickname:
+        raise BusinessException(message="昵称不能为空")
+
+    email = (data.email or "").strip() or None
+    phone = (data.phone or "").strip() or None
+    if not email and not phone:
+        raise BusinessException(message="邮箱或手机号至少填写一个")
+
+    if email:
+        email = verification_service.normalize_target("email", email)
+        exists = (
+            db.query(User)
+            .filter(User.email == email, User.id != user.id)
+            .first()
+        )
+        if exists:
+            raise BusinessException(message="该邮箱已被其他账号使用")
+    if phone:
+        phone = verification_service.normalize_target("phone", phone)
+        exists = (
+            db.query(User)
+            .filter(User.phone == phone, User.id != user.id)
+            .first()
+        )
+        if exists:
+            raise BusinessException(message="该手机号已被其他账号使用")
+
+    user.nickname = nickname
+    if email != user.email:
+        user.email = email
+        # 改绑联系方式后需要重新验证，避免沿用旧的验证状态。
+        user.email_verified_at = None
+    if phone != user.phone:
+        user.phone = phone
+        user.phone_verified_at = None
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise BusinessException(message="邮箱或手机号已被其他账号使用")
+    db.refresh(user)
+    return user
+
+
+def update_notification_prefs(
+    db: Session, user: User, data: NotificationPrefsUpdate
+) -> User:
+    user.notify_health = data.notify_health
+    user.notify_order = data.notify_order
+    user.notify_system = data.notify_system
+    db.commit()
+    db.refresh(user)
+    return user

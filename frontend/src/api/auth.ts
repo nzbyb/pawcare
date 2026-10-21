@@ -57,3 +57,25 @@ export function changePassword(payload: {
 }): Promise<{ token: string }> {
   return request.put<{ token: string }>('/auth/password', payload)
 }
+
+export interface ProfilePayload {
+  nickname: string
+  email?: string | null
+  phone?: string | null
+}
+
+export interface NotificationPrefsPayload {
+  notify_health: boolean
+  notify_order: boolean
+  notify_system: boolean
+}
+
+export function updateProfile(payload: ProfilePayload): Promise<User> {
+  return request.put<User>('/auth/me', payload)
+}
+
+export function updateNotificationPrefs(
+  payload: NotificationPrefsPayload,
+): Promise<User> {
+  return request.put<User>('/auth/notification-prefs', payload)
+}

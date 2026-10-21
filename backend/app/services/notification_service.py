@@ -27,7 +27,11 @@ def create_notification(
     link: str | None = None,
     dedupe_key: str | None = None,
 ) -> Notification | None:
-    """写入一条通知；dedupe_key 命中时直接跳过。"""
+    """写入一条通知；dedupe_key 命中或用户关闭该类通知时跳过。"""
+    user = db.get(User, user_id)
+    if not user or not getattr(user, f"notify_{category}", True):
+        return None
+
     if dedupe_key:
         exists = (
             db.query(Notification.id)

@@ -19,6 +19,15 @@ const navItems = [
   { key: 'agent', label: '智能助手', short: '助手', icon: 'chat', to: '/agent', match: ['agent'] },
 ]
 
+const accountItem = {
+  key: 'profile',
+  label: '个人中心',
+  short: '我的',
+  icon: 'user',
+  to: '/profile',
+  match: ['profile'],
+}
+
 const roleLabels: Record<string, string> = {
   pet_owner: '宠物主',
   boarding_staff: '寄养员',
@@ -39,13 +48,20 @@ const todayText = computed(() =>
   }).format(new Date()),
 )
 
-const userOptions = [{ label: '退出登录', key: 'logout' }]
+const userOptions = [
+  { label: '个人中心', key: 'profile' },
+  { label: '退出登录', key: 'logout' },
+]
 
 function isActive(item: (typeof navItems)[number]): boolean {
   return item.match.includes(String(route.name))
 }
 
 function onUserSelect(key: string | number): void {
+  if (key === 'profile') {
+    router.push(accountItem.to)
+    return
+  }
   if (key === 'logout') {
     auth.logout()
     router.replace({ name: 'login' })
@@ -71,6 +87,18 @@ function onUserSelect(key: string | number): void {
         >
           <AppIcon :name="item.icon" :size="16" />
           <span>{{ item.label }}</span>
+        </router-link>
+      </nav>
+
+      <div class="nav-label nav-label-account">账户</div>
+      <nav class="nav">
+        <router-link
+          :to="accountItem.to"
+          class="nav-item"
+          :class="{ active: isActive(accountItem) }"
+        >
+          <AppIcon :name="accountItem.icon" :size="16" />
+          <span>{{ accountItem.label }}</span>
         </router-link>
       </nav>
 
@@ -127,7 +155,12 @@ function onUserSelect(key: string | number): void {
           </router-link>
         </nav>
         <NotificationBell />
-        <n-button quaternary size="small" @click="onUserSelect('logout')">退出</n-button>      </header>
+        <n-dropdown :options="userOptions" trigger="click" @select="onUserSelect">
+          <n-button quaternary circle size="small" aria-label="账户菜单">
+            <AppIcon name="user" :size="15" />
+          </n-button>
+        </n-dropdown>
+      </header>
 
       <router-view v-slot="{ Component }">
         <component :is="Component" :key="route.fullPath" />
@@ -166,6 +199,10 @@ function onUserSelect(key: string | number): void {
   font-weight: 650;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.nav-label-account {
+  margin-top: 20px;
 }
 
 .nav {

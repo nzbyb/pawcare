@@ -20,13 +20,30 @@ class UserResponse(BaseModel):
     role: str
     email: str | None = None
     phone: str | None = None
+    email_verified_at: datetime | None = None
+    phone_verified_at: datetime | None = None
     status: int
+    notify_health: bool = True
+    notify_order: bool = True
+    notify_system: bool = True
     create_time: datetime | None = None
 
 
 class UserUpdate(BaseModel):
     nickname: str | None = Field(default=None, max_length=50)
     phone: str | None = Field(default=None, max_length=30)
+
+
+class ProfileUpdate(BaseModel):
+    nickname: str = Field(min_length=1, max_length=50)
+    email: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+
+
+class NotificationPrefsUpdate(BaseModel):
+    notify_health: bool
+    notify_order: bool
+    notify_system: bool
 
 
 class ChangePasswordRequest(BaseModel):

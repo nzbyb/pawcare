@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -54,4 +54,25 @@ class User(Base):
     )
     locked_until: Mapped[datetime | None] = mapped_column(
         DateTime, comment="锁定截止时间"
+    )
+    notify_health: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="1",
+        nullable=False,
+        comment="接收健康提醒",
+    )
+    notify_order: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="1",
+        nullable=False,
+        comment="接收订单动态",
+    )
+    notify_system: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="1",
+        nullable=False,
+        comment="接收系统通知",
     )

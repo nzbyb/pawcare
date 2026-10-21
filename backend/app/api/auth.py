@@ -12,7 +12,12 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     SendCodeRequest,
 )
-from app.schemas.user import ChangePasswordRequest, UserResponse
+from app.schemas.user import (
+    ChangePasswordRequest,
+    NotificationPrefsUpdate,
+    ProfileUpdate,
+    UserResponse,
+)
 from app.services import auth_service, verification_service
 
 router = APIRouter(prefix="/auth", tags=["认证"])
@@ -58,6 +63,30 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
 def me(current_user: User = Depends(get_current_user)):
     return Response.success(
         data=UserResponse.model_validate(current_user).model_dump()
+    )
+
+
+@router.put("/me", response_model=Response)
+def update_me(
+    data: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = auth_service.update_profile(db, current_user, data)
+    return Response.success(
+        message="资料已更新", data=UserResponse.model_validate(user).model_dump()
+    )
+
+
+@router.put("/notification-prefs", response_model=Response)
+def update_notification_prefs(
+    data: NotificationPrefsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = auth_service.update_notification_prefs(db, current_user, data)
+    return Response.success(
+        message="通知偏好已保存", data=UserResponse.model_validate(user).model_dump()
     )
 
 
