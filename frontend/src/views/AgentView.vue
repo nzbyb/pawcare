@@ -23,10 +23,10 @@ interface ChatBubble {
 const router = useRouter()
 
 const examples = [
-  '豆豆下一次疫苗什么时候到期？',
+  '下一次疫苗什么时候到期？',
   '第一次寄养狗狗需要准备哪些东西？',
   '帮我看看下个月有没有适合中型犬的笼舍。',
-  '给豆豆预约 11 月 1 日到 11 月 5 日的寄养。',
+  '预约 11 月 1 日到 11 月 5 日的寄养。',
 ]
 
 const capabilities = [
@@ -327,7 +327,7 @@ onMounted(() => {
               <small>权限感知 · 草稿确认 · 可追溯</small>
             </div>
           </div>
-          <span class="status-dot" :class="{ busy: sending }">
+          <span class="agent-status" :class="{ busy: sending }">
             <span class="status-mark" />
             {{ sending ? '思考中' : '在线' }}
           </span>
@@ -593,13 +593,15 @@ onMounted(() => {
   font-size: 11px;
 }
 
-.status-dot {
+.agent-status {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   color: var(--pc-ok);
   font-size: 11.5px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .status-mark {
@@ -609,11 +611,11 @@ onMounted(() => {
   background: var(--pc-ok);
 }
 
-.status-dot.busy {
+.agent-status.busy {
   color: var(--pc-warn);
 }
 
-.status-dot.busy .status-mark {
+.agent-status.busy .status-mark {
   background: var(--pc-warn);
 }
 
