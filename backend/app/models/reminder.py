@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -33,11 +33,29 @@ class Reminder(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
-    __table_args__ = {"comment": "站内通知"}
+    __table_args__ = (
+        # 同一用户同一条业务事件只通知一次；dedupe_key 为 NULL 的通知不受限制。
+        Index("uq_notifications_user_dedupe", "user_id", "dedupe_key", unique=True),
+        Index("ix_notifications_user_read", "user_id", "is_read"),
+        {"comment": "站内通知"},
+    )
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    category: Mapped[str] = mapped_column(
+        String(20),
+        default="system",
+        server_default="system",
+        nullable=False,
+        comment="health / order / system",
+    )
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    link: Mapped[str | None] = mapped_column(
+        String(255), comment="点击后跳转的前端路径"
+    )
+    dedupe_key: Mapped[str | None] = mapped_column(
+        String(120), comment="业务事件幂等键"
+    )
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

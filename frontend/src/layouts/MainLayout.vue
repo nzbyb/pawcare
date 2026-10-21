@@ -5,6 +5,7 @@ import { NButton, NDropdown } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
 import AppLogo from '@/components/AppLogo.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -103,6 +104,7 @@ function onUserSelect(key: string | number): void {
         </div>
         <div class="topbar-actions">
           <span class="topbar-date">{{ todayText }}</span>
+          <NotificationBell />
           <button class="assistant-button" type="button" @click="router.push('/agent')">
             <AppIcon name="chat" :size="15" />
             打开助手
@@ -124,8 +126,8 @@ function onUserSelect(key: string | number): void {
             {{ item.short }}
           </router-link>
         </nav>
-        <n-button quaternary size="small" @click="onUserSelect('logout')">退出</n-button>
-      </header>
+        <NotificationBell />
+        <n-button quaternary size="small" @click="onUserSelect('logout')">退出</n-button>      </header>
 
       <router-view v-slot="{ Component }">
         <component :is="Component" :key="route.fullPath" />

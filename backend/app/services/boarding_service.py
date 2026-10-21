@@ -28,6 +28,7 @@ from app.schemas.boarding import (
     KennelCreate,
     KennelUpdate,
 )
+from app.services import notification_service
 
 # pending 的订单也占用档期，避免两个用户同时确认后撞车
 ACTIVE_ORDER_STATUSES = ("pending", "confirmed", "checked_in", "boarding")
@@ -54,6 +55,11 @@ def _audit(
             after_data=after,
         )
     )
+
+
+def _pet_name(db: Session, pet_id: int) -> str:
+    pet = db.get(Pet, pet_id)
+    return pet.name if pet else "宠物"
 
 
 def _validate_period(start_date, end_date) -> int:
@@ -375,6 +381,25 @@ def confirm_draft(
                 "nights": nights,
             },
         )
+        pet_name = _pet_name(db, order.pet_id)
+        notification_service.create_notification(
+            db,
+            order.owner_id,
+            "预约已提交",
+            f"{pet_name} 的寄养预约已生成，等待寄养员确认。",
+            category="order",
+            link="/boarding",
+            dedupe_key=f"order:{order.id}:created",
+        )
+        notification_service.notify_roles(
+            db,
+            ("boarding_staff",),
+            "新的寄养预约",
+            f"{pet_name} 的寄养订单待确认。",
+            category="order",
+            link="/boarding",
+            dedupe_key=f"order:{order.id}:staff_new",
+        )
         db.commit()
     except IntegrityError:
         # 并发确认时另一条请求可能已经生成订单，回滚后返回已有订单。
@@ -438,6 +463,15 @@ def confirm_order(db: Session, user: User, order_id: int) -> BoardingOrder:
     order.status = "confirmed"
     order.confirmed_at = datetime.now()
     _audit(db, user.id, "boarding_order.confirm", "boarding_order", order.id)
+    notification_service.create_notification(
+        db,
+        order.owner_id,
+        "寄养订单已确认",
+        f"{_pet_name(db, order.pet_id)} 的寄养预约已由寄养员确认。",
+        category="order",
+        link="/boarding",
+        dedupe_key=f"order:{order.id}:confirmed",
+    )
     db.commit()
     db.refresh(order)
     return order
@@ -493,6 +527,15 @@ def check_in(db: Session, user: User, order_id: int) -> BoardingOrder:
     order.checked_in_at = datetime.now()
     kennel.status = "occupied"
     _audit(db, user.id, "boarding_order.check_in", "boarding_order", order.id)
+    notification_service.create_notification(
+        db,
+        order.owner_id,
+        "宠物已入住",
+        f"{_pet_name(db, order.pet_id)} 已办理入住，寄养期间可查看每日日报。",
+        category="order",
+        link="/boarding",
+        dedupe_key=f"order:{order.id}:checked_in",
+    )
     db.commit()
     db.refresh(order)
     return order
@@ -520,6 +563,15 @@ def check_out(db: Session, user: User, order_id: int) -> BoardingOrder:
     if kennel and kennel.status == "occupied":
         kennel.status = "available"
     _audit(db, user.id, "boarding_order.check_out", "boarding_order", order.id)
+    notification_service.create_notification(
+        db,
+        order.owner_id,
+        "寄养已结束",
+        f"{_pet_name(db, order.pet_id)} 已办理退房，感谢使用 PawCare。",
+        category="order",
+        link="/boarding",
+        dedupe_key=f"order:{order.id}:checked_out",
+    )
     db.commit()
     db.refresh(order)
     return order
@@ -543,6 +595,29 @@ def cancel_order(db: Session, user: User, order_id: int) -> BoardingOrder:
 
     order.status = "cancelled"
     _audit(db, user.id, "boarding_order.cancel", "boarding_order", order.id)
+    pet_name = _pet_name(db, order.pet_id)
+    if user.id == order.owner_id:
+        # 宠物主取消后通知寄养员，避免档期空出来却没人知道。
+        notification_service.notify_roles(
+            db,
+            ("boarding_staff",),
+            "寄养订单已取消",
+            f"{pet_name} 的寄养订单已被宠物主取消。",
+            category="order",
+            link="/boarding",
+            dedupe_key=f"order:{order.id}:cancelled",
+            exclude_user_id=user.id,
+        )
+    else:
+        notification_service.create_notification(
+            db,
+            order.owner_id,
+            "寄养订单已取消",
+            f"{pet_name} 的寄养订单已取消。",
+            category="order",
+            link="/boarding",
+            dedupe_key=f"order:{order.id}:cancelled",
+        )
     db.commit()
     db.refresh(order)
     return order
@@ -580,6 +655,15 @@ def add_daily_report(
     db.add(report)
     db.flush()
     _audit(db, user.id, "boarding_report.create", "boarding_report", report.id)
+    notification_service.create_notification(
+        db,
+        order.owner_id,
+        "今日寄养日报已更新",
+        f"{_pet_name(db, order.pet_id)} 在 {data.report_date.isoformat()} 的日报已填写。",
+        category="order",
+        link="/boarding",
+        dedupe_key=f"order:{order.id}:report:{data.report_date.isoformat()}",
+    )
     db.commit()
     db.refresh(report)
     return report

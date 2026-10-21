@@ -202,3 +202,20 @@ export interface AgentHistoryMessage {
   latency_ms?: number | null
   create_time?: string | null
 }
+
+export type NotificationCategory = 'health' | 'order' | 'system'
+
+export interface NotificationItem {
+  id: number
+  category: NotificationCategory
+  title: string
+  content: string
+  link?: string | null
+  is_read: boolean
+  create_time?: string | null
+}
+
+export interface NotificationPage {
+  items: NotificationItem[]
+  unread: number
+}

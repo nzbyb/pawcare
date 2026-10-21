@@ -18,7 +18,9 @@ from app.config import settings
 from app.models.audit import AuditLog
 from app.models.boarding import BoardingOrder
 from app.models.payment import PaymentOrder
+from app.models.pet import Pet
 from app.models.user import User
+from app.services import notification_service
 
 PAYABLE_ORDER_STATUSES = ("pending", "confirmed")
 ACTIVE_PAYMENT_STATUSES = ("created", "paying")
@@ -249,6 +251,17 @@ def mock_notify(db: Session, payment_no: str, token: str) -> PaymentOrder:
         "payment.paid",
         payment.id,
         {"order_id": order.id, "amount": payment.amount},
+    )
+    pet = db.get(Pet, order.pet_id)
+    pet_name = pet.name if pet else "宠物"
+    notification_service.create_notification(
+        db,
+        payment.owner_id,
+        "支付成功",
+        f"{pet_name} 的寄养订单已支付 ¥{float(payment.amount):.2f}，预约正式生效。",
+        category="order",
+        link="/boarding",
+        dedupe_key=f"order:{order.id}:paid",
     )
     db.commit()
     db.refresh(payment)
