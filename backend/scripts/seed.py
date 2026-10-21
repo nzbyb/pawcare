@@ -431,7 +431,7 @@ def main() -> None:
                     "record_type": "deworm",
                     "title": "体内驱虫",
                     "record_date": TODAY - timedelta(days=20),
-                    "next_due_date": TODAY + timedelta(days=10),
+                    "next_due_date": TODAY + timedelta(days=3),
                     "note": "拜宠清",
                 },
                 {
