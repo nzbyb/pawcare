@@ -219,3 +219,41 @@ export interface NotificationPage {
   items: NotificationItem[]
   unread: number
 }
+
+export interface HandoverHealthRecord {
+  record_type: string
+  title: string
+  record_date: string
+  next_due_date?: string | null
+  note?: string | null
+}
+
+export interface HandoverReminder {
+  title: string
+  due_date: string
+  status: string
+}
+
+export interface HandoverSheet {
+  order: BoardingOrder
+  pet: {
+    name: string
+    species: string
+    breed?: string | null
+    gender?: string | null
+    neutered: boolean
+    birthday?: string | null
+    allergies?: string | null
+    notes?: string | null
+    latest_weight?: number | null
+    latest_weight_date?: string | null
+  }
+  owner: {
+    nickname: string
+    phone?: string | null
+    email?: string | null
+  }
+  health_records: HandoverHealthRecord[]
+  reminders: HandoverReminder[]
+  generated_at: string
+}

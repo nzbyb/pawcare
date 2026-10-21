@@ -156,6 +156,17 @@ def get_boarding_order(
     return Response.success(data=boarding_service.order_payload(db, order))
 
 
+@router.get("/boarding/orders/{order_id}/handover", response_model=Response)
+def get_boarding_handover(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        data=boarding_service.handover_payload(db, current_user, order_id)
+    )
+
+
 @router.post("/boarding/orders/{order_id}/confirm", response_model=Response)
 def confirm_boarding_order(
     order_id: int,

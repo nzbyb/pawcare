@@ -18,7 +18,9 @@ from app.models.boarding import (
     BoardingOrder,
     Kennel,
 )
-from app.models.pet import Pet
+from app.models.health import HealthRecord
+from app.models.pet import Pet, WeightRecord
+from app.models.reminder import Reminder
 from app.models.user import User
 from app.schemas.boarding import (
     BoardingDraftCreate,
@@ -699,3 +701,75 @@ def order_payload(db: Session, order: BoardingOrder) -> dict:
     payload.kennel_code = kennel.code if kennel else None
     payload.nights = (order.end_date - order.start_date).days
     return payload.model_dump()
+
+
+def handover_payload(db: Session, user: User, order_id: int) -> dict:
+    """寄养交接单：订单 + 宠物健康摘要 + 主人联系方式，供前台打印签字。"""
+    order = _get_order(db, user, order_id)
+    pet = db.get(Pet, order.pet_id)
+    if not pet or pet.status == "deleted":
+        raise BusinessException(message="宠物档案不存在", code=404)
+    owner = db.get(User, order.owner_id)
+
+    records = (
+        db.query(HealthRecord)
+        .filter(
+            HealthRecord.pet_id == pet.id,
+            HealthRecord.deleted_at.is_(None),
+        )
+        .order_by(HealthRecord.record_date.desc(), HealthRecord.id.desc())
+        .limit(12)
+        .all()
+    )
+    reminders = (
+        db.query(Reminder)
+        .filter(Reminder.pet_id == pet.id, Reminder.status == "pending")
+        .order_by(Reminder.due_date.asc())
+        .all()
+    )
+    weight = (
+        db.query(WeightRecord)
+        .filter(WeightRecord.pet_id == pet.id)
+        .order_by(WeightRecord.record_date.desc(), WeightRecord.id.desc())
+        .first()
+    )
+
+    return {
+        "order": order_payload(db, order),
+        "pet": {
+            "name": pet.name,
+            "species": pet.species,
+            "breed": pet.breed,
+            "gender": pet.gender,
+            "neutered": pet.neutered,
+            "birthday": pet.birthday,
+            "allergies": pet.allergies,
+            "notes": pet.notes,
+            "latest_weight": float(weight.weight_kg) if weight else None,
+            "latest_weight_date": weight.record_date if weight else None,
+        },
+        "owner": {
+            "nickname": owner.nickname if owner else "未知",
+            "phone": owner.phone if owner else None,
+            "email": owner.email if owner else None,
+        },
+        "health_records": [
+            {
+                "record_type": record.record_type,
+                "title": record.title,
+                "record_date": record.record_date,
+                "next_due_date": record.next_due_date,
+                "note": record.note,
+            }
+            for record in records
+        ],
+        "reminders": [
+            {
+                "title": reminder.title,
+                "due_date": reminder.due_date,
+                "status": reminder.status,
+            }
+            for reminder in reminders
+        ],
+        "generated_at": datetime.now(),
+    }

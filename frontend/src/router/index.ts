@@ -62,6 +62,12 @@ const router = createRouter({
       meta: { public: true, title: '支付' },
     },
     {
+      path: '/boarding/orders/:id/handover',
+      name: 'handover',
+      component: () => import('@/views/HandoverView.vue'),
+      meta: { title: '寄养交接单' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },

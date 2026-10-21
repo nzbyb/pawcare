@@ -4,6 +4,7 @@ import type {
   BoardingDraftPayload,
   BoardingOrder,
   DailyReport,
+  HandoverSheet,
   Kennel,
   KennelSize,
 } from '@/types'
@@ -65,6 +66,10 @@ export function cancelOrder(orderId: number): Promise<BoardingOrder> {
 
 export function listReports(orderId: number): Promise<DailyReport[]> {
   return request.get<DailyReport[]>(`/boarding/orders/${orderId}/reports`)
+}
+
+export function getHandover(orderId: number): Promise<HandoverSheet> {
+  return request.get<HandoverSheet>(`/boarding/orders/${orderId}/handover`)
 }
 
 export function createReport(

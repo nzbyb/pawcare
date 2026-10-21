@@ -122,3 +122,45 @@ class DailyReportResponse(BaseModel):
     note: str | None = None
     photos: list | None = None
     created_by: int | None = None
+
+
+class HandoverHealthRecord(BaseModel):
+    record_type: str
+    title: str
+    record_date: date
+    next_due_date: date | None = None
+    note: str | None = None
+
+
+class HandoverReminder(BaseModel):
+    title: str
+    due_date: date
+    status: str
+
+
+class HandoverPet(BaseModel):
+    name: str
+    species: str
+    breed: str | None = None
+    gender: str | None = None
+    neutered: bool
+    birthday: date | None = None
+    allergies: str | None = None
+    notes: str | None = None
+    latest_weight: float | None = None
+    latest_weight_date: date | None = None
+
+
+class HandoverOwner(BaseModel):
+    nickname: str
+    phone: str | None = None
+    email: str | None = None
+
+
+class HandoverResponse(BaseModel):
+    order: BoardingOrderResponse
+    pet: HandoverPet
+    owner: HandoverOwner
+    health_records: list[HandoverHealthRecord]
+    reminders: list[HandoverReminder]
+    generated_at: datetime

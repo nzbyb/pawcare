@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   NButton,
   NDatePicker,
@@ -44,6 +45,7 @@ type OrderAction = 'confirm' | 'check-in' | 'check-out' | 'cancel'
 
 const auth = useAuthStore()
 const message = useMessage()
+const router = useRouter()
 
 const isOwner = computed(() => auth.user?.role === 'pet_owner')
 const isStaff = computed(
@@ -672,6 +674,13 @@ onBeforeUnmount(stopCountdown)
                 </n-button>
                 <n-button size="small" quaternary @click="openReports(order)">
                   日报
+                </n-button>
+                <n-button
+                  size="small"
+                  quaternary
+                  @click="router.push(`/boarding/orders/${order.id}/handover`)"
+                >
+                  交接单
                 </n-button>
 
                 <template v-if="isStaff">
