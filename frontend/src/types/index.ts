@@ -262,3 +262,80 @@ export interface HandoverSheet {
   reminders: HandoverReminder[]
   generated_at: string
 }
+
+export interface AdminUser {
+  id: number
+  username: string
+  nickname: string
+  role: UserRole
+  email?: string | null
+  phone?: string | null
+  status: number
+  pet_count: number
+  order_count: number
+  create_time?: string | null
+}
+
+export interface AdminUserPage {
+  items: AdminUser[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface KennelOccupancyInfo {
+  order_id: number
+  order_status: string
+  payment_status: string
+  pet_name: string
+  pet_species?: string | null
+  owner_name: string
+  owner_phone?: string | null
+  start_date: string
+  end_date: string
+}
+
+export interface KennelOccupancyItem {
+  id: number
+  code: string
+  size: string
+  status: string
+  display_status: string
+  daily_price: number
+  note?: string | null
+  occupancy?: KennelOccupancyInfo | null
+}
+
+export interface KennelOccupancy {
+  date: string
+  summary: {
+    total: number
+    occupied: number
+    available: number
+    blocked: number
+  }
+  items: KennelOccupancyItem[]
+}
+
+export interface AuditLogItem {
+  id: number
+  actor_id?: number | null
+  actor_name: string
+  actor_username?: string | null
+  action: string
+  target_type: string
+  target_id?: number | null
+  before_data?: Record<string, unknown> | null
+  after_data?: Record<string, unknown> | null
+  trace_id?: string | null
+  ip?: string | null
+  create_time?: string | null
+}
+
+export interface AuditLogPage {
+  items: AuditLogItem[]
+  total: number
+  page: number
+  page_size: number
+}
+

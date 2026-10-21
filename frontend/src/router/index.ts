@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 declare module 'vue-router' {
   interface RouteMeta {
     public?: boolean
+    admin?: boolean
     title?: string
   }
 }
@@ -59,6 +60,12 @@ const router = createRouter({
           component: () => import('@/views/ProfileView.vue'),
           meta: { title: '个人中心' },
         },
+        {
+          path: 'admin',
+          name: 'admin',
+          component: () => import('@/views/AdminView.vue'),
+          meta: { title: '管理控制台', admin: true },
+        },
       ],
     },
     {
@@ -87,6 +94,9 @@ router.beforeEach((to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.name === 'login' && auth.isLoggedIn) {
+    return { name: 'dashboard' }
+  }
+  if (to.meta.admin && auth.user?.role !== 'admin') {
     return { name: 'dashboard' }
   }
   return true

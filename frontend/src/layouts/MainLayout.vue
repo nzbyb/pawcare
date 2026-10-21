@@ -28,6 +28,16 @@ const accountItem = {
   match: ['profile'],
 }
 
+const adminItem = {
+  key: 'admin',
+  label: '管理控制台',
+  icon: 'shield',
+  to: '/admin',
+  match: ['admin'],
+}
+
+const isAdmin = computed(() => auth.user?.role === 'admin')
+
 const roleLabels: Record<string, string> = {
   pet_owner: '宠物主',
   boarding_staff: '寄养员',
@@ -53,7 +63,7 @@ const userOptions = [
   { label: '退出登录', key: 'logout' },
 ]
 
-function isActive(item: (typeof navItems)[number]): boolean {
+function isActive(item: { match: string[] }): boolean {
   return item.match.includes(String(route.name))
 }
 
@@ -101,6 +111,20 @@ function onUserSelect(key: string | number): void {
           <span>{{ accountItem.label }}</span>
         </router-link>
       </nav>
+
+      <template v-if="isAdmin">
+        <div class="nav-label nav-label-account">管理</div>
+        <nav class="nav">
+          <router-link
+            :to="adminItem.to"
+            class="nav-item"
+            :class="{ active: isActive(adminItem) }"
+          >
+            <AppIcon :name="adminItem.icon" :size="16" />
+            <span>{{ adminItem.label }}</span>
+          </router-link>
+        </nav>
+      </template>
 
       <div class="sidebar-foot">
         <div class="sidebar-note">
