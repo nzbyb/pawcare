@@ -155,3 +155,41 @@ def test_order_events_notify_owner_and_staff(
     client.post(f"/api/boarding/orders/{order['id']}/check-in", headers=staff_headers)
     titles = [item["title"] for item in list_notifications(client, owner_headers)["items"]]
     assert titles.count("宠物已入住") == 1
+
+
+def test_scheduled_sync_covers_all_owners(client, owner_headers, db):
+    from app.models.reminder import Notification
+    from app.models.user import User
+    from app.services import notification_service
+
+    pet = create_pet(client, owner_headers).json()["data"]
+    client.post(
+        f"/api/pets/{pet['id']}/health-records",
+        headers=owner_headers,
+        json={
+            "record_type": "vaccine",
+            "title": "定时扫描测试",
+            "record_date": date.today().isoformat(),
+            "next_due_date": (date.today() + timedelta(days=1)).isoformat(),
+        },
+    )
+
+    created = notification_service.sync_all_reminders(db)
+    assert created >= 1
+
+    from app.models.pet import Pet
+
+    owner = db.get(User, db.get(Pet, pet["id"]).owner_id)
+    notice = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == owner.id,
+            Notification.category == "health",
+        )
+        .first()
+    )
+    assert notice is not None
+    assert "定时扫描测试" in notice.content
+
+    # 重复执行不会重复写通知。
+    assert notification_service.sync_all_reminders(db) == 0

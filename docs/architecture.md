@@ -179,10 +179,17 @@ MySQL 没有 PostgreSQL 的排他约束，因此不再建库级约束。
 
 | 接口 | 用途 |
 |---|---|
+| `GET /api/admin/overview` | 运营概览：账号 / 宠物 / 订单 / 今日入住退房 / 实收金额 / 待处理提醒 / 知识库切片 |
 | `GET /api/admin/users` | 账号检索、角色 / 状态筛选、分页；附带宠物与订单数 |
 | `PUT /api/admin/users/{id}/status` | 启用 / 停用账号 |
 | `GET /api/admin/kennels/occupancy` | 指定日期的笼舍占用与在住宠物 |
 | `GET /api/admin/audit-logs` | 只读审计日志，按操作前缀筛选 |
+| `GET /api/admin/knowledge` | 只读知识库切片，按标题 / 内容 / 文档 ID 检索；不暴露向量 |
+
+- 概览与知识库都是聚合读，不新增写路径；统计口径直接来自业务表，不做缓存，
+  避免管理端数字与实际订单状态不一致。
+- 知识库只读：切片由 seed 与离线导入脚本写入，管理端不提供增删改，防止在演示中
+  把未审核的内容写进检索集合。
 
 - `audit_logs` 由寄养、支付服务在业务事务内写入，管理端不补写、不修改。
 - 停用账号会递增 `token_version`，已登录会话立即失效；不能停用自己，也不能停用
@@ -204,6 +211,33 @@ MySQL 没有 PostgreSQL 的排他约束，因此不再建库级约束。
 - 提醒属于健康档案：宠物主可操作，寄养员只读，管理员沿用档案写权限。
 - 已处理的提醒不能重复操作；延后后的提醒仍可再次完成或延后。
 - 两种动作都写 `audit_logs`（`reminder.done` / `reminder.snooze`），保留处理前状态和日期。
+
+### 5.8 图片上传
+
+`POST /api/uploads`（需登录，`multipart/form-data`）用于宠物头像和寄养日报照片：
+
+- 类型判定只读文件头魔数（JPEG / PNG / GIF / WEBP），不信任客户端的 `Content-Type`
+  和文件名扩展名；伪装成图片的脚本会被拒绝。
+- 上限 10MB；超出直接返回 400，不落盘。
+- 文件名用 `uuid4().hex` 重新生成，按用途分目录（`uploads/pet/`、`uploads/report/`），
+  客户端无法决定存放路径。
+- 返回 `{"url": "/uploads/{purpose}/{filename}", "size": …}`；静态目录由 FastAPI
+  `StaticFiles` 挂载在 `/uploads`。
+- 业务侧再校验一次：日报最多 6 张、地址必须以 `/uploads/` 开头，避免把外部链接
+  写进日报（例如带追踪参数的图片）。
+
+### 5.9 定时任务
+
+`app/scheduler.py` 用 APScheduler 的 `BackgroundScheduler` 在进程内跑一个任务：
+
+- 每天 08:00（`Asia/Shanghai`）扫描全部正常宠物主，调用
+  `notification_service.sync_all_reminders` 补站内通知；逐用户提交，单用户失败不影响其他人。
+- 通知本身带 `dedupe_key`，重复扫描不会产生重复消息；因此多进程部署时每个进程都跑
+  也是安全的（代价只是多次查询）。
+- 与“读通知时惰性同步”互补：惰性同步保证用户一进站就看到最新提醒，定时任务保证
+  用户当天不打开页面也能在通知中心看到。
+- `SCHEDULER_ENABLED=false` 可关闭；pytest 在 `conftest.py` 里关闭，避免线程在临时
+  SQLite 上并发写。
 
 ## 6. 调度引擎选型
 

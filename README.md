@@ -201,6 +201,8 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 | `LOGIN_MAX_FAILURES` / `LOGIN_LOCK_MINUTES` | 连续密码错误锁定阈值，默认 5 次 / 15 分钟 |
 | `PAYMENT_TTL_MINUTES` | 支付单有效期，默认 15 分钟 |
 | `PAYMENT_MOCK_BASE_URL` | 二维码里写的前端地址，默认 `http://localhost:5173` |
+| `UPLOAD_DIR` / `MAX_FILE_SIZE_MB` | 图片存放目录与单图上限，默认 `uploads` / 10MB |
+| `SCHEDULER_ENABLED` | 每日 08:00 提醒同步任务；测试环境设为 `false` |
 
 注册与找回密码支持邮箱或手机号验证码：6 位数字、5 分钟有效、60 秒重发冷却、
 每小时最多 5 次、最多试错 5 次、一次核销，旧码在签发新码时立即作废。
@@ -234,7 +236,11 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 - [x] Alembic 初始迁移（MySQL）、向量存库 + 应用层余弦检索、订单档期冲突校验
 - [ ] Docker Compose 启动验证（本机 Docker daemon 未运行）
 - [x] 模拟支付收银台：二维码、扫码页、回调幂等、超时关单、订单支付状态
-- [ ] 通知中心
+- [x] 通知中心：站内通知、偏好开关、健康提醒完成 / 延后、每日 08:00 定时补发
+- [x] 图片上传：宠物头像、日报照片（魔数识别、10MB 上限、UUID 文件名）
+- [x] 管理控制台：运营概览、账号启停、笼舍占用、审计日志、只读知识库
+- [x] 寄养订单时间轴：预约 → 确认 → 入住 → 退房
+- [x] 后端 pytest 111 条用例全部通过
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
 - [x] LangGraph 对照适配层（`AGENT_ENGINE` / 评测 `--engine`，生产默认显式循环）
 

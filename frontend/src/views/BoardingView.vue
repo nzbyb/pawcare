@@ -30,6 +30,7 @@ import {
   listReports,
 } from '@/api/boarding'
 import { listPets } from '@/api/pets'
+import { uploadImage, validateImage } from '@/api/uploads'
 import { useAuthStore } from '@/stores/auth'
 import type {
   BoardingDraft,
@@ -142,6 +143,45 @@ const statusMap: Record<string, { label: string; type: TagType }> = {
 
 function statusMeta(status: string): { label: string; type: TagType } {
   return statusMap[status] ?? { label: status, type: 'default' }
+}
+
+interface OrderStep {
+  label: string
+  time?: string | null
+  done: boolean
+  current: boolean
+}
+
+function shortDateTime(value?: string | null): string {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const month = String(parsed.getMonth() + 1).padStart(2, '0')
+  const day = String(parsed.getDate()).padStart(2, '0')
+  const hour = String(parsed.getHours()).padStart(2, '0')
+  const minute = String(parsed.getMinutes()).padStart(2, '0')
+  return `${month}-${day} ${hour}:${minute}`
+}
+
+function orderTimeline(order: BoardingOrder): OrderStep[] {
+  const ranks: Record<string, number> = {
+    pending: 1,
+    confirmed: 2,
+    checked_in: 3,
+    boarding: 3,
+    completed: 4,
+  }
+  const rank = ranks[order.status] ?? 1
+  const steps = [
+    { label: '预约', time: null as string | null, done: true },
+    { label: '确认', time: order.confirmed_at ?? null, done: rank >= 2 },
+    { label: '入住', time: order.checked_in_at ?? null, done: rank >= 3 },
+    { label: '退房', time: order.checked_out_at ?? null, done: rank >= 4 },
+  ]
+  return steps.map((step, index) => ({
+    ...step,
+    current: step.done && (index === steps.length - 1 || !steps[index + 1].done),
+  }))
 }
 
 function canPay(order: BoardingOrder): boolean {
@@ -387,6 +427,10 @@ const reportAppetite = ref('good')
 const reportStool = ref('normal')
 const reportSpirit = ref('good')
 const reportNote = ref('')
+const reportPhotos = ref<string[]>([])
+const reportUploading = ref(false)
+const reportPhotoInput = ref<HTMLInputElement | null>(null)
+const MAX_REPORT_PHOTOS = 6
 
 async function openReports(order: BoardingOrder): Promise<void> {
   reportOrder.value = order
@@ -399,6 +443,8 @@ async function openReports(order: BoardingOrder): Promise<void> {
   } else {
     reportDate.value = today
   }
+  reportPhotos.value = []
+  reportNote.value = ''
   reportsLoading.value = true
   try {
     reportList.value = await listReports(order.id)
@@ -407,6 +453,48 @@ async function openReports(order: BoardingOrder): Promise<void> {
   } finally {
     reportsLoading.value = false
   }
+}
+
+function pickReportPhotos(): void {
+  reportPhotoInput.value?.click()
+}
+
+async function onReportPhotos(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (!files.length) return
+
+  const remaining = MAX_REPORT_PHOTOS - reportPhotos.value.length
+  if (remaining <= 0) {
+    message.warning(`日报最多上传 ${MAX_REPORT_PHOTOS} 张照片`)
+    return
+  }
+  const selected = files.slice(0, remaining)
+  if (files.length > remaining) {
+    message.warning(`最多还能上传 ${remaining} 张，已自动截取`)
+  }
+
+  reportUploading.value = true
+  try {
+    for (const file of selected) {
+      const error = validateImage(file)
+      if (error) {
+        message.warning(`${file.name}：${error}`)
+        continue
+      }
+      const result = await uploadImage(file, 'report')
+      reportPhotos.value.push(result.url)
+    }
+  } catch {
+    // http 拦截器已经提示
+  } finally {
+    reportUploading.value = false
+  }
+}
+
+function removeReportPhoto(url: string): void {
+  reportPhotos.value = reportPhotos.value.filter((item) => item !== url)
 }
 
 async function submitReport(): Promise<void> {
@@ -421,9 +509,11 @@ async function submitReport(): Promise<void> {
       stool: reportStool.value,
       spirit: reportSpirit.value,
       note: reportNote.value.trim() || null,
+      photos: reportPhotos.value.length ? reportPhotos.value : null,
     })
     message.success('日报已保存')
     reportNote.value = ''
+    reportPhotos.value = []
     reportList.value = await listReports(reportOrder.value.id)
   } catch {
     // http 拦截器已经提示
@@ -654,6 +744,19 @@ onBeforeUnmount(stopCountdown)
                 <span class="dot-sep">·</span>
                 {{ order.kennel_code }}
               </p>
+              <ol class="order-timeline" :class="{ cancelled: order.status === 'cancelled' }">
+                <li
+                  v-for="step in orderTimeline(order)"
+                  :key="step.label"
+                  :class="{ done: step.done, current: step.current }"
+                >
+                  <span class="timeline-dot" />
+                  <span class="timeline-label">{{ step.label }}</span>
+                  <span v-if="step.time" class="timeline-time">
+                    {{ shortDateTime(step.time) }}
+                  </span>
+                </li>
+              </ol>
               <p v-if="order.note" class="order-note">{{ order.note }}</p>
             </div>
 
@@ -750,6 +853,17 @@ onBeforeUnmount(stopCountdown)
                 <span class="pill grey">精神 {{ spiritLabel(report.spirit) }}</span>
               </div>
               <p>{{ report.note || '寄养员没有留下文字备注。' }}</p>
+              <div v-if="report.photos?.length" class="report-photos">
+                <a
+                  v-for="photo in report.photos"
+                  :key="photo"
+                  :href="photo"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img :src="photo" alt="寄养日报照片" loading="lazy" />
+                </a>
+              </div>
             </div>
           </article>
         </div>
@@ -782,6 +896,43 @@ onBeforeUnmount(stopCountdown)
           :autosize="{ minRows: 2, maxRows: 4 }"
           placeholder="今天的状态、进食、排便和互动情况"
         />
+
+        <div class="report-photo-field">
+          <div class="report-photo-head">
+            <span>照片</span>
+            <small>{{ reportPhotos.length }} / {{ MAX_REPORT_PHOTOS }}</small>
+          </div>
+          <div class="report-photo-list">
+            <div v-for="photo in reportPhotos" :key="photo" class="report-photo-item">
+              <img :src="photo" alt="待保存的日报照片" />
+              <button
+                type="button"
+                aria-label="移除照片"
+                @click="removeReportPhoto(photo)"
+              >
+                ×
+              </button>
+            </div>
+            <button
+              v-if="reportPhotos.length < MAX_REPORT_PHOTOS"
+              type="button"
+              class="report-photo-add"
+              :disabled="reportUploading"
+              @click="pickReportPhotos"
+            >
+              {{ reportUploading ? '上传中' : '+ 添加' }}
+            </button>
+          </div>
+          <input
+            ref="reportPhotoInput"
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            @change="onReportPhotos"
+          />
+        </div>
+
         <n-button type="primary" @click="submitReport">保存日报</n-button>
       </div>
     </n-modal>
@@ -1150,6 +1301,64 @@ onBeforeUnmount(stopCountdown)
   line-height: 1.6;
 }
 
+.order-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order-timeline li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--pc-ink-faint);
+  font-size: 11px;
+}
+
+.order-timeline li + li::before {
+  width: 16px;
+  height: 1px;
+  margin: 0 6px;
+  background: var(--pc-line);
+  content: '';
+}
+
+.timeline-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: 50%;
+  background: var(--pc-surface);
+}
+
+.order-timeline li.done .timeline-dot {
+  border-color: var(--pc-primary);
+  background: var(--pc-primary);
+}
+
+.order-timeline li.done .timeline-label {
+  color: var(--pc-ink-soft);
+}
+
+.order-timeline li.current .timeline-label {
+  color: var(--pc-primary);
+  font-weight: 650;
+}
+
+.timeline-time {
+  color: var(--pc-ink-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.order-timeline.cancelled li:not(.done) {
+  opacity: 0.55;
+}
+
 .order-side {
   display: flex;
   flex: 0 0 auto;
@@ -1220,6 +1429,110 @@ onBeforeUnmount(stopCountdown)
   color: var(--pc-ink);
   font-size: 12.5px;
   line-height: 1.65;
+}
+
+.report-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.report-photos a {
+  display: block;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border: 1px solid var(--pc-line);
+  border-radius: 5px;
+  background: var(--pc-surface);
+}
+
+.report-photos img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.15s ease;
+}
+
+.report-photos a:hover img {
+  transform: scale(1.04);
+}
+
+.report-photo-field {
+  margin-bottom: 12px;
+}
+
+.report-photo-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  color: var(--pc-ink-soft);
+  font-size: 12px;
+}
+
+.report-photo-head small {
+  color: var(--pc-ink-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-photo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.report-photo-item {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  overflow: hidden;
+  border: 1px solid var(--pc-line);
+  border-radius: 5px;
+  background: var(--pc-surface-muted);
+}
+
+.report-photo-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.report-photo-item button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(31, 42, 38, 0.72);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.report-photo-add {
+  display: grid;
+  width: 66px;
+  height: 66px;
+  place-items: center;
+  border: 1px dashed var(--pc-line-strong);
+  border-radius: 5px;
+  background: var(--pc-surface-muted);
+  color: var(--pc-ink-soft);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.report-photo-add:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .report-form {

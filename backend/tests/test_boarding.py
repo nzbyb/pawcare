@@ -303,6 +303,7 @@ def test_staff_workflow_and_daily_reports(
         "stool": "normal",
         "spirit": "good",
         "note": "今天胃口很好",
+        "photos": ["/uploads/report/demo.png"],
     }
     resp = client.post(
         f"/api/boarding/orders/{order['id']}/reports",
@@ -325,11 +326,23 @@ def test_staff_workflow_and_daily_reports(
     )
     assert resp.json()["code"] == 403
 
+    resp = client.post(
+        f"/api/boarding/orders/{order['id']}/reports",
+        headers=staff_headers,
+        json={
+            **report_payload,
+            "report_date": day(52),
+            "photos": ["https://example.com/tracker.png"],
+        },
+    )
+    assert resp.json()["code"] == 400
+
     reports = client.get(
         f"/api/boarding/orders/{order['id']}/reports", headers=owner_headers
     ).json()["data"]
     assert len(reports) == 1
     assert reports[0]["note"] == "今天胃口很好"
+    assert reports[0]["photos"] == ["/uploads/report/demo.png"]
 
     resp = client.post(
         f"/api/boarding/orders/{order['id']}/check-out", headers=staff_headers

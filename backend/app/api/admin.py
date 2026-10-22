@@ -13,6 +13,29 @@ from app.services import admin_service
 router = APIRouter(prefix="/admin", tags=["管理端"])
 
 
+@router.get("/overview", response_model=Response)
+def get_overview(
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=admin_service.overview(db))
+
+
+@router.get("/knowledge", response_model=Response)
+def list_knowledge(
+    keyword: str | None = Query(default=None, max_length=50),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        data=admin_service.list_knowledge(
+            db, keyword=keyword, page=page, page_size=page_size
+        )
+    )
+
+
 @router.get("/users", response_model=Response)
 def list_users(
     keyword: str | None = Query(default=None, max_length=50),

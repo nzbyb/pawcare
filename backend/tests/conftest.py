@@ -16,6 +16,8 @@ os.environ["UPLOAD_DIR"] = str(Path(tempfile.gettempdir()) / "pawcare_test_uploa
 # 测试不连真实 SMTP：验证码随响应返回。
 # 这里显式清空 SMTP，避免本机 .env 配了真实邮箱后测试真的发信。
 os.environ["VERIFY_CODE_DEBUG"] = "true"
+# 测试不启动后台定时任务，避免线程在临时 SQLite 上并发写。
+os.environ["SCHEDULER_ENABLED"] = "false"
 os.environ["SMTP_HOST"] = ""
 os.environ["SMTP_USER"] = ""
 os.environ["SMTP_PASSWORD"] = ""

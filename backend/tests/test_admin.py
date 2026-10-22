@@ -1,3 +1,6 @@
+import uuid
+
+from app.models.knowledge import KnowledgeChunk
 from tests.test_boarding import create_draft, create_kennel, day
 from tests.test_pets import create_pet
 
@@ -12,6 +15,57 @@ def test_admin_endpoints_reject_non_admin(client, owner_headers, staff_headers):
         assert (
             client.get("/api/admin/audit-logs", headers=headers).json()["code"] == 403
         )
+        assert client.get("/api/admin/overview", headers=headers).json()["code"] == 403
+        assert (
+            client.get("/api/admin/knowledge", headers=headers).json()["code"] == 403
+        )
+
+
+def test_admin_overview_aggregates_counts(client, admin_headers, owner_credentials):
+    create_pet(client, {"Authorization": f"Bearer {owner_credentials['token']}"})
+
+    body = client.get("/api/admin/overview", headers=admin_headers).json()
+    assert body["code"] == 200, body
+    data = body["data"]
+    assert data["users"]["total"] >= 2
+    assert data["users"]["owners"] >= 1
+    assert data["users"]["admins"] >= 1
+    assert data["pets"]["active"] >= 1
+    assert data["orders"]["total"] >= 0
+    assert data["revenue"]["paid_total"] >= 0
+    assert data["knowledge"]["chunks"] >= 0
+    assert data["reminders"]["pending"] >= 0
+
+
+def test_admin_lists_knowledge_chunks(client, admin_headers, db):
+    doc_id = f"doc-{uuid.uuid4().hex[:8]}"
+    chunk = KnowledgeChunk(
+        doc_id=doc_id,
+        chunk_index=0,
+        title="疫苗后的观察要点",
+        content="接种后留院观察三十分钟，注意精神与食欲变化。",
+        meta={"category": "vaccine", "source": "测试知识库"},
+    )
+    db.add(chunk)
+    db.commit()
+    try:
+        body = client.get(
+            "/api/admin/knowledge",
+            headers=admin_headers,
+            params={"keyword": "观察"},
+        ).json()
+        assert body["code"] == 200, body
+        data = body["data"]
+        assert data["total"] >= 1
+        item = next(row for row in data["items"] if row["doc_id"] == doc_id)
+        assert item["title"] == "疫苗后的观察要点"
+        assert item["category"] == "vaccine"
+        assert item["source"] == "测试知识库"
+        assert item["has_embedding"] is False
+    finally:
+        # 测试库会话级共享，清理后避免影响 RAG 检索用例。
+        db.delete(chunk)
+        db.commit()
 
 
 def test_list_users_search_and_filters(client, admin_headers, owner_credentials):

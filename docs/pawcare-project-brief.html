@@ -1327,7 +1327,7 @@
           <span class="metric-label">权限感知工具</span>
         </div>
         <div>
-          <span class="metric-value">64</span>
+          <span class="metric-value">111</span>
           <span class="metric-label">后端测试</span>
         </div>
       </div>
@@ -1392,7 +1392,7 @@
       <h2>进度与计划</h2>
     </div>
     <div class="section-body">
-      <p class="lead">当前已经完成 8 个开发日，主链路和评测都能跑通。</p>
+      <p class="lead">当前已经完成 13 个开发日，主链路、管理端和评测都能跑通。</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -1425,23 +1425,28 @@
             </tr>
             <tr>
               <td>评测</td>
-              <td>91 条用例、6 个变体、JSON / CSV 报告、64 条后端测试</td>
+              <td>91 条用例、6 个变体、JSON / CSV 报告、111 条后端测试</td>
               <td><strong>已完成</strong></td>
             </tr>
             <tr>
               <td>前端视觉</td>
-              <td>减少模板感，借鉴成熟开源 UI，不改动主链路</td>
-              <td>下一步</td>
+              <td>临床工作台主题（暖白 + 松绿）、助手页、管理控制台、手机视图</td>
+              <td><strong>已完成</strong></td>
+            </tr>
+            <tr>
+              <td>通知中心</td>
+              <td>疫苗到期、订单状态变更的站内通知、偏好开关、每日 08:00 定时补发</td>
+              <td><strong>已完成</strong></td>
+            </tr>
+            <tr>
+              <td>管理端与上传</td>
+              <td>运营概览、账号启停、笼舍占用、审计日志、只读知识库、头像与日报照片</td>
+              <td><strong>已完成</strong></td>
             </tr>
             <tr>
               <td>部署验证</td>
               <td>Docker Compose + Nginx + MySQL</td>
               <td>待环境</td>
-            </tr>
-            <tr>
-              <td>通知中心</td>
-              <td>疫苗到期、订单状态变更的站内通知</td>
-              <td>可选</td>
             </tr>
             <tr>
               <td>论文材料</td>
@@ -1455,13 +1460,13 @@
       <div class="grid-3">
         <article class="mini-card">
           <p class="mini-label">下一步 01</p>
-          <h3>前端改版</h3>
-          <p>先找 2–3 个成熟开源后台参考，重做布局、配色和组件密度，保留现有 Agent 交互。</p>
+          <h3>部署验证</h3>
+          <p>用云服务器跑 Docker Compose、MySQL 迁移和 Nginx 反向代理，确认容器内 Agent 与上传链路正常。</p>
         </article>
         <article class="mini-card">
           <p class="mini-label">下一步 02</p>
-          <h3>部署验证</h3>
-          <p>跑通 Docker Compose、MySQL 迁移和 Nginx 反向代理，验证容器内后端链路。</p>
+          <h3>评测复跑</h3>
+          <p>在最终代码上重跑 91 条用例和 6 个变体，把延迟、token 与通过率更新成论文里的最终数据。</p>
         </article>
         <article class="mini-card">
           <p class="mini-label">下一步 03</p>
@@ -1542,7 +1547,7 @@
         </article>
         <article class="qa">
           <h3>工作量够不够？</h3>
-          <p>不是只有一个对话页面：业务底座、8 个工具、RAG、SSE、前端、数据库迁移、64 条测试和 91 条评测都在仓库里，消融实验也能复现。</p>
+          <p>不是只有一个对话页面：业务底座、8 个工具、RAG、SSE、前端、管理端、数据库迁移、111 条测试和 91 条评测都在仓库里，消融实验也能复现。</p>
         </article>
         <article class="qa">
           <h3>为什么选 DeepSeek？</h3>
@@ -1550,7 +1555,7 @@
         </article>
         <article class="qa">
           <h3>下一步做什么？</h3>
-          <p>先把前端视觉和部署打磨好，再补通知中心和论文材料；主链路和评测不再大改，避免为了展示效果牺牲可验证性。</p>
+          <p>先跑通部署验证，再把评测在最终代码上重跑一遍，最后沉淀论文材料；功能主链路已经收口，不再为了展示效果牺牲可验证性。</p>
         </article>
       </div>
     </div>

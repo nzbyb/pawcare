@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # 留空 = 进程内存限流；Docker 部署时注入 redis://redis:6379/0
     REDIS_URL: str = ""
 
+    # 进程内定时任务：每天扫描一次健康提醒并补站内通知。
+    # 测试关闭；多进程部署时每个进程都会跑，靠 dedupe_key 保证不重复。
+    SCHEDULER_ENABLED: bool = True
+
     AI_MAX_CONCURRENCY: int = 3
     # 主实现是显式循环；langgraph 仅用于对照实验，需额外安装依赖。
     AGENT_ENGINE: str = "explicit"

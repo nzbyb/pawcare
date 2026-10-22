@@ -80,6 +80,7 @@ export function createReport(
     stool?: string
     spirit?: string
     note?: string | null
+    photos?: string[] | null
   },
 ): Promise<DailyReport> {
   return request.post<DailyReport>(`/boarding/orders/${orderId}/reports`, payload)

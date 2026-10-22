@@ -347,7 +347,10 @@ onMounted(load)
           <div v-if="pets.length" class="pet-mini-list">
             <div v-for="pet in pets.slice(0, 5)" :key="pet.id" class="pet-mini">
               <router-link :to="`/pets/${pet.id}`" class="pet-mini-link">
-                <span class="mini-avatar">{{ pet.name.slice(0, 1) }}</span>
+                <span class="mini-avatar">
+                  <img v-if="pet.photo_url" :src="pet.photo_url" :alt="pet.name" loading="lazy" />
+                  <template v-else>{{ pet.name.slice(0, 1) }}</template>
+                </span>
                 <span class="mini-main">
                   <span class="mini-title">
                     <strong>{{ pet.name }}</strong>
@@ -748,12 +751,19 @@ onMounted(load)
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
+  overflow: hidden;
   border: 1px solid var(--pc-line);
   border-radius: 6px;
   background: var(--pc-surface-muted);
   color: var(--pc-primary);
   font-size: 13px;
   font-weight: 700;
+}
+
+.mini-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .pet-mini-link {

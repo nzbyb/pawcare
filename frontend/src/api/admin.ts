@@ -1,8 +1,10 @@
 import { request } from './http'
 import type {
+  AdminOverview,
   AdminUserPage,
   AuditLogPage,
   KennelOccupancy,
+  KnowledgePage,
   UserRole,
 } from '@/types'
 
@@ -39,4 +41,16 @@ export function getKennelOccupancy(day?: string): Promise<KennelOccupancy> {
 
 export function listAuditLogs(params: AuditLogQuery): Promise<AuditLogPage> {
   return request.get<AuditLogPage>('/admin/audit-logs', { params })
+}
+
+export function getAdminOverview(): Promise<AdminOverview> {
+  return request.get<AdminOverview>('/admin/overview')
+}
+
+export function listKnowledge(params: {
+  keyword?: string
+  page?: number
+  page_size?: number
+}): Promise<KnowledgePage> {
+  return request.get<KnowledgePage>('/admin/knowledge', { params })
 }

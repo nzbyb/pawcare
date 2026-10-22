@@ -637,6 +637,11 @@ def add_daily_report(
         raise BusinessException(message="该订单还不能填写日报", code=409)
     if not (order.start_date <= data.report_date <= order.end_date):
         raise BusinessException(message="日报日期必须在寄养日期范围内")
+    if data.photos:
+        if len(data.photos) > 6:
+            raise BusinessException(message="日报最多上传 6 张照片")
+        if any(not photo.startswith("/uploads/") for photo in data.photos):
+            raise BusinessException(message="照片地址不合法")
 
     exists = (
         db.query(BoardingDailyReport)

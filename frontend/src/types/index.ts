@@ -49,6 +49,7 @@ export interface PetPayload {
   neutered: boolean
   allergies?: string | null
   notes?: string | null
+  photo_url?: string | null
 }
 
 export interface WeightRecord {
@@ -334,6 +335,46 @@ export interface AuditLogItem {
 
 export interface AuditLogPage {
   items: AuditLogItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface AdminOverview {
+  date: string
+  users: {
+    total: number
+    active: number
+    owners: number
+    staff: number
+    admins: number
+  }
+  pets: { active: number }
+  orders: {
+    total: number
+    active: number
+    completed: number
+    today_check_in: number
+    today_check_out: number
+  }
+  revenue: { paid_total: number }
+  reminders: { pending: number; due_soon: number }
+  knowledge: { documents: number; chunks: number }
+}
+
+export interface KnowledgeChunkItem {
+  id: number
+  doc_id: string
+  chunk_index: number
+  title: string
+  category?: string | null
+  source?: string | null
+  content: string
+  has_embedding: boolean
+}
+
+export interface KnowledgePage {
+  items: KnowledgeChunkItem[]
   total: number
   page: number
   page_size: number

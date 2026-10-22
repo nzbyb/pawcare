@@ -13,6 +13,7 @@ import {
 } from 'naive-ui'
 
 import { createPet, updatePet } from '@/api/pets'
+import { uploadImage, validateImage } from '@/api/uploads'
 import type { Pet, PetGender, PetPayload, PetSpecies } from '@/types'
 
 interface PetFormState {
@@ -24,6 +25,7 @@ interface PetFormState {
   neutered: boolean
   allergies: string
   notes: string
+  photoUrl: string | null
 }
 
 const props = defineProps<{
@@ -38,6 +40,8 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const saving = ref(false)
+const uploading = ref(false)
+const photoInput = ref<HTMLInputElement | null>(null)
 
 const form = reactive<PetFormState>({
   name: '',
@@ -48,6 +52,7 @@ const form = reactive<PetFormState>({
   neutered: false,
   allergies: '',
   notes: '',
+  photoUrl: null,
 })
 
 const speciesOptions = [
@@ -74,12 +79,41 @@ watch(
     form.neutered = pet?.neutered ?? false
     form.allergies = pet?.allergies ?? ''
     form.notes = pet?.notes ?? ''
+    form.photoUrl = pet?.photo_url ?? null
   },
   { immediate: true },
 )
 
 function close(): void {
   emit('update:show', false)
+}
+
+function pickPhoto(): void {
+  photoInput.value?.click()
+}
+
+async function onPhotoChange(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  const error = validateImage(file)
+  if (error) {
+    message.warning(error)
+    return
+  }
+
+  uploading.value = true
+  try {
+    const result = await uploadImage(file, 'pet')
+    form.photoUrl = result.url
+    message.success('照片已上传')
+  } catch {
+    // http 拦截器已经提示
+  } finally {
+    uploading.value = false
+  }
 }
 
 async function submit(): Promise<void> {
@@ -97,6 +131,7 @@ async function submit(): Promise<void> {
     neutered: form.neutered,
     allergies: form.allergies.trim() || null,
     notes: form.notes.trim() || null,
+    photo_url: form.photoUrl,
   }
 
   saving.value = true
@@ -125,6 +160,36 @@ async function submit(): Promise<void> {
     @update:show="emit('update:show', $event)"
   >
     <n-form label-placement="top">
+      <div class="photo-row">
+        <div class="photo-preview" :class="{ empty: !form.photoUrl }">
+          <img v-if="form.photoUrl" :src="form.photoUrl" :alt="form.name || '宠物照片'" />
+          <span v-else>{{ form.name.trim().slice(0, 1) || '宠' }}</span>
+        </div>
+        <div class="photo-actions">
+          <div class="photo-buttons">
+            <n-button size="small" :loading="uploading" @click="pickPhoto">
+              {{ form.photoUrl ? '更换照片' : '上传照片' }}
+            </n-button>
+            <n-button
+              v-if="form.photoUrl"
+              size="small"
+              quaternary
+              @click="form.photoUrl = null"
+            >
+              移除
+            </n-button>
+          </div>
+          <p>JPG / PNG / WEBP，最大 10MB。也可以先保存档案，之后再补照片。</p>
+        </div>
+        <input
+          ref="photoInput"
+          type="file"
+          accept="image/*"
+          hidden
+          @change="onPhotoChange"
+        />
+      </div>
+
       <div class="form-grid">
         <n-form-item label="名字" required>
           <n-input v-model:value="form.name" placeholder="例如：豆豆" maxlength="50" />
@@ -186,6 +251,53 @@ async function submit(): Promise<void> {
 </template>
 
 <style scoped>
+.photo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--pc-line);
+}
+
+.photo-preview {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--pc-line);
+  border-radius: 7px;
+  background: var(--pc-surface-muted);
+  color: var(--pc-primary);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-actions {
+  min-width: 0;
+}
+
+.photo-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photo-actions p {
+  margin: 7px 0 0;
+  color: var(--pc-ink-faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

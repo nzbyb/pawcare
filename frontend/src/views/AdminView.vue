@@ -18,27 +18,31 @@ import {
 
 import AppIcon from '@/components/AppIcon.vue'
 import {
+  getAdminOverview,
   getKennelOccupancy,
   listAuditLogs,
+  listKnowledge,
   listUsers,
   updateUserStatus,
 } from '@/api/admin'
 import { useAuthStore } from '@/stores/auth'
 import type {
+  AdminOverview,
   AdminUser,
   AuditLogItem,
   KennelOccupancy,
   KennelOccupancyItem,
+  KnowledgeChunkItem,
   UserRole,
 } from '@/types'
 
-type TabName = 'users' | 'kennels' | 'audit'
+type TabName = 'overview' | 'users' | 'kennels' | 'audit' | 'knowledge'
 
 const dialog = useDialog()
 const message = useMessage()
 const auth = useAuthStore()
 
-const activeTab = ref<TabName>('users')
+const activeTab = ref<TabName>('overview')
 
 const roleLabels: Record<string, string> = {
   pet_owner: '宠物主',
@@ -125,6 +129,14 @@ function formatDateTime(value?: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value))
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency: 'CNY',
+    maximumFractionDigits: 0,
+  }).format(value)
 }
 
 /* ---------------------------- 用户管理 ---------------------------- */
@@ -412,18 +424,147 @@ const logColumns: DataTableColumns<AuditLogItem> = [
   },
 ]
 
+/* ---------------------------- 运营概览 ---------------------------- */
+
+const overview = ref<AdminOverview | null>(null)
+const overviewLoading = ref(false)
+
+async function loadOverview(): Promise<void> {
+  overviewLoading.value = true
+  try {
+    overview.value = await getAdminOverview()
+  } catch {
+    // http 拦截器已经提示
+  } finally {
+    overviewLoading.value = false
+  }
+}
+
+/* ---------------------------- 知识库 ---------------------------- */
+
+const knowledgeItems = ref<KnowledgeChunkItem[]>([])
+const knowledgeTotal = ref(0)
+const knowledgePage = ref(1)
+const knowledgePageSize = 10
+const knowledgeKeyword = ref('')
+const knowledgeLoading = ref(false)
+
+const knowledgeColumns: DataTableColumns<KnowledgeChunkItem> = [
+  {
+    title: '标题',
+    key: 'title',
+    width: 190,
+    render: (row) =>
+      h(
+        'div',
+        { style: 'display:flex;min-width:0;flex-direction:column;line-height:1.35' },
+        [
+          h(
+            'strong',
+            {
+              style:
+                'overflow:hidden;font-size:12.5px;font-weight:600;text-overflow:ellipsis;white-space:nowrap',
+            },
+            row.title,
+          ),
+          h(
+            'span',
+            { style: 'color:var(--pc-ink-faint);font-size:10.5px' },
+            row.doc_id,
+          ),
+        ],
+      ),
+  },
+  {
+    title: '分类',
+    key: 'category',
+    width: 92,
+    render: (row) => row.category || '—',
+  },
+  {
+    title: '来源',
+    key: 'source',
+    width: 130,
+    render: (row) => row.source || '—',
+  },
+  {
+    title: '切片',
+    key: 'chunk_index',
+    width: 64,
+    render: (row) => `#${row.chunk_index + 1}`,
+  },
+  {
+    title: '内容摘要',
+    key: 'content',
+    minWidth: 320,
+    render: (row) =>
+      h(
+        'span',
+        {
+          title: row.content,
+          style:
+            'display:block;max-width:420px;overflow:hidden;color:var(--pc-ink-soft);font-size:12px;text-overflow:ellipsis;white-space:nowrap',
+        },
+        row.content,
+      ),
+  },
+  {
+    title: '向量',
+    key: 'has_embedding',
+    width: 72,
+    render: (row) =>
+      h(
+        'span',
+        { class: row.has_embedding ? 'pill sage' : 'pill grey' },
+        row.has_embedding ? '已生成' : '待生成',
+      ),
+  },
+]
+
+async function loadKnowledge(): Promise<void> {
+  knowledgeLoading.value = true
+  try {
+    const page = await listKnowledge({
+      keyword: knowledgeKeyword.value.trim() || undefined,
+      page: knowledgePage.value,
+      page_size: knowledgePageSize,
+    })
+    knowledgeItems.value = page.items
+    knowledgeTotal.value = page.total
+  } catch {
+    knowledgeItems.value = []
+    knowledgeTotal.value = 0
+  } finally {
+    knowledgeLoading.value = false
+  }
+}
+
+function searchKnowledge(): void {
+  knowledgePage.value = 1
+  void loadKnowledge()
+}
+
+function changeKnowledgePage(page: number): void {
+  knowledgePage.value = page
+  void loadKnowledge()
+}
+
 /* ---------------------------- 切换 ---------------------------- */
 
 function onTabChange(name: string | number): void {
-  if (name === 'kennels') {
+  if (name === 'overview') {
+    void loadOverview()
+  } else if (name === 'kennels') {
     void loadOccupancy()
   } else if (name === 'audit') {
     void loadLogs()
+  } else if (name === 'knowledge') {
+    void loadKnowledge()
   }
 }
 
 onMounted(() => {
-  void loadUsers()
+  void loadOverview()
 })
 </script>
 
@@ -444,6 +585,92 @@ onMounted(() => {
       animated
       @update:value="onTabChange"
     >
+      <n-tab-pane name="overview" tab="运营概览">
+        <n-spin :show="overviewLoading">
+          <template v-if="overview">
+            <section class="overview-section">
+              <header class="overview-head">
+                <h2>账号与宠物</h2>
+                <span>统计截至 {{ overview.date }}</span>
+              </header>
+              <div class="stat-row">
+                <div class="stat">
+                  <span>账号总数</span>
+                  <strong>{{ overview.users.total }}</strong>
+                </div>
+                <div class="stat">
+                  <span>正常账号</span>
+                  <strong class="ok">{{ overview.users.active }}</strong>
+                </div>
+                <div class="stat">
+                  <span>宠物主</span>
+                  <strong>{{ overview.users.owners }}</strong>
+                </div>
+                <div class="stat">
+                  <span>宠物档案</span>
+                  <strong>{{ overview.pets.active }}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="overview-section">
+              <header class="overview-head">
+                <h2>寄养与收入</h2>
+                <span>寄养员 {{ overview.users.staff }} 人 · 管理员 {{ overview.users.admins }} 人</span>
+              </header>
+              <div class="stat-row">
+                <div class="stat">
+                  <span>订单总数</span>
+                  <strong>{{ overview.orders.total }}</strong>
+                </div>
+                <div class="stat">
+                  <span>进行中</span>
+                  <strong class="warn">{{ overview.orders.active }}</strong>
+                </div>
+                <div class="stat">
+                  <span>今日入住 / 退房</span>
+                  <strong>
+                    {{ overview.orders.today_check_in }} / {{ overview.orders.today_check_out }}
+                  </strong>
+                </div>
+                <div class="stat">
+                  <span>累计实收</span>
+                  <strong>{{ formatMoney(overview.revenue.paid_total) }}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="overview-section">
+              <header class="overview-head">
+                <h2>提醒与知识库</h2>
+                <span>健康提醒 7 天内到期会推送到通知中心</span>
+              </header>
+              <div class="stat-row">
+                <div class="stat">
+                  <span>待处理提醒</span>
+                  <strong class="warn">{{ overview.reminders.pending }}</strong>
+                </div>
+                <div class="stat">
+                  <span>7 天内到期</span>
+                  <strong>{{ overview.reminders.due_soon }}</strong>
+                </div>
+                <div class="stat">
+                  <span>知识文档</span>
+                  <strong>{{ overview.knowledge.documents }}</strong>
+                </div>
+                <div class="stat">
+                  <span>知识切片</span>
+                  <strong>{{ overview.knowledge.chunks }}</strong>
+                </div>
+              </div>
+            </section>
+          </template>
+          <div v-else-if="!overviewLoading" class="empty-wrap soft-card">
+            <n-empty description="暂时没有可展示的统计数据" />
+          </div>
+        </n-spin>
+      </n-tab-pane>
+
       <n-tab-pane name="users" tab="用户管理">
         <div class="toolbar">
           <n-input
@@ -612,6 +839,48 @@ onMounted(() => {
           />
         </div>
       </n-tab-pane>
+
+      <n-tab-pane name="knowledge" tab="知识库">
+        <div class="toolbar">
+          <n-input
+            v-model:value="knowledgeKeyword"
+            placeholder="搜索标题 / 内容 / 文档 ID"
+            clearable
+            style="width: 280px"
+            @keyup.enter="searchKnowledge"
+            @clear="searchKnowledge"
+          >
+            <template #prefix><AppIcon name="search" :size="14" /></template>
+          </n-input>
+          <n-button quaternary @click="searchKnowledge">查询</n-button>
+          <span class="toolbar-total">只读 · 共 {{ knowledgeTotal }} 个切片</span>
+        </div>
+
+        <div class="table-card">
+          <n-spin :show="knowledgeLoading">
+            <n-data-table
+              :columns="knowledgeColumns"
+              :data="knowledgeItems"
+              :row-key="(row: KnowledgeChunkItem) => row.id"
+              :bordered="false"
+              :scroll-x="900"
+              size="small"
+            />
+            <div v-if="!knowledgeLoading && !knowledgeItems.length" class="empty-wrap">
+              <n-empty description="没有匹配的知识条目" />
+            </div>
+          </n-spin>
+        </div>
+
+        <div class="pager">
+          <n-pagination
+            :page="knowledgePage"
+            :page-size="knowledgePageSize"
+            :item-count="knowledgeTotal"
+            @update:page="changeKnowledgePage"
+          />
+        </div>
+      </n-tab-pane>
     </n-tabs>
   </div>
 </template>
@@ -653,6 +922,29 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   padding: 14px 0 4px;
+}
+
+.overview-section {
+  margin-bottom: 18px;
+}
+
+.overview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+.overview-head h2 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.overview-head span {
+  color: var(--pc-ink-faint);
+  font-size: 11.5px;
 }
 
 .stat-row {

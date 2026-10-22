@@ -379,9 +379,12 @@ onBeforeUnmount(() => {
 
         <section class="pet-hero soft-card fade-up">
           <div class="hero-main">
-            <div class="avatar">
-              <strong>{{ pet.name.slice(0, 1) }}</strong>
-              <small>{{ pet.species === 'cat' ? 'CAT' : pet.species === 'dog' ? 'DOG' : 'PET' }}</small>
+            <div class="avatar" :class="{ 'has-photo': pet.photo_url }">
+              <img v-if="pet.photo_url" :src="pet.photo_url" :alt="pet.name" />
+              <template v-else>
+                <strong>{{ pet.name.slice(0, 1) }}</strong>
+                <small>{{ pet.species === 'cat' ? 'CAT' : pet.species === 'dog' ? 'DOG' : 'PET' }}</small>
+              </template>
             </div>
             <div class="hero-info">
               <div class="name-row">
@@ -721,11 +724,18 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border: 1px solid var(--pc-line);
   border-radius: 7px;
   background: var(--pc-surface-muted);
   color: var(--pc-primary);
   line-height: 1.1;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .avatar strong {

@@ -133,6 +133,21 @@ def sync_due_reminders(db: Session, user: User) -> int:
     return created
 
 
+def sync_all_reminders(db: Session) -> int:
+    """扫描全部正常宠物主，供定时任务调用；逐用户提交，单用户失败不影响其他人。"""
+    user_ids = (
+        db.query(User.id)
+        .filter(User.role == "pet_owner", User.status == 1)
+        .all()
+    )
+    created = 0
+    for (user_id,) in user_ids:
+        user = db.get(User, user_id)
+        if user is not None:
+            created += sync_due_reminders(db, user)
+    return created
+
+
 def list_notifications(
     db: Session, user: User, limit: int = 10, unread_only: bool = False
 ) -> list[Notification]:

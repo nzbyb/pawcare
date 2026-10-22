@@ -19,6 +19,7 @@ from app.common.exceptions import (
 from app.config import ALLOWED_ORIGINS, UPLOAD_PATH, settings
 from app.database import Base, engine
 from app.limiter import limiter
+from app.scheduler import shutdown_scheduler, start_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,11 @@ async def lifespan(app: FastAPI):
         logger.warning(
             "VERIFY_CODE_DEBUG 已开启：验证码会随接口响应返回，仅限本地调试，部署时必须关闭。"
         )
-    yield
+    start_scheduler()
+    try:
+        yield
+    finally:
+        shutdown_scheduler()
 
 
 app = FastAPI(title="PawCare API", version="0.1.0", lifespan=lifespan)

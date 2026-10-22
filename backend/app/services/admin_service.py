@@ -5,7 +5,7 @@
 避免管理端绕开确认、入住、退房和支付的事务与审计。
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 from app.common.exceptions import BusinessException
 from app.models.audit import AuditLog
 from app.models.boarding import BoardingOrder, Kennel
+from app.models.knowledge import KnowledgeChunk
 from app.models.pet import Pet
+from app.models.reminder import Reminder
 from app.models.user import User
 from app.services.boarding_service import ACTIVE_ORDER_STATUSES
 
@@ -64,6 +66,152 @@ def _user_payload(user: User, counts: dict[str, int] | None = None) -> dict:
         "create_time": user.create_time,
         "pet_count": (counts or {}).get("pet_count", 0),
         "order_count": (counts or {}).get("order_count", 0),
+    }
+
+
+def overview(db: Session) -> dict:
+    """管理端概览：账号、宠物、订单、实收和知识库规模，只读聚合。"""
+    today = date.today()
+    soon = today + timedelta(days=7)
+
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    active_users = (
+        db.query(func.count(User.id)).filter(User.status == 1).scalar() or 0
+    )
+    role_counts = dict(
+        db.query(User.role, func.count(User.id))
+        .filter(User.status == 1)
+        .group_by(User.role)
+        .all()
+    )
+
+    total_pets = (
+        db.query(func.count(Pet.id)).filter(Pet.status == "active").scalar() or 0
+    )
+
+    total_orders = db.query(func.count(BoardingOrder.id)).scalar() or 0
+    active_orders = (
+        db.query(func.count(BoardingOrder.id))
+        .filter(BoardingOrder.status.in_(ACTIVE_ORDER_STATUSES))
+        .scalar()
+        or 0
+    )
+    completed_orders = (
+        db.query(func.count(BoardingOrder.id))
+        .filter(BoardingOrder.status == "completed")
+        .scalar()
+        or 0
+    )
+    today_check_in = (
+        db.query(func.count(BoardingOrder.id))
+        .filter(func.date(BoardingOrder.checked_in_at) == today.isoformat())
+        .scalar()
+        or 0
+    )
+    today_check_out = (
+        db.query(func.count(BoardingOrder.id))
+        .filter(func.date(BoardingOrder.checked_out_at) == today.isoformat())
+        .scalar()
+        or 0
+    )
+    paid_total = (
+        db.query(func.coalesce(func.sum(BoardingOrder.paid_amount), 0))
+        .filter(BoardingOrder.payment_status == "paid")
+        .scalar()
+        or 0
+    )
+
+    pending_reminders = (
+        db.query(func.count(Reminder.id))
+        .filter(Reminder.status == "pending")
+        .scalar()
+        or 0
+    )
+    due_soon = (
+        db.query(func.count(Reminder.id))
+        .filter(Reminder.status == "pending", Reminder.due_date <= soon)
+        .scalar()
+        or 0
+    )
+
+    knowledge_documents = (
+        db.query(func.count(func.distinct(KnowledgeChunk.doc_id))).scalar() or 0
+    )
+    knowledge_chunks = db.query(func.count(KnowledgeChunk.id)).scalar() or 0
+
+    return {
+        "date": today,
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "owners": role_counts.get("pet_owner", 0),
+            "staff": role_counts.get("boarding_staff", 0),
+            "admins": role_counts.get("admin", 0),
+        },
+        "pets": {"active": total_pets},
+        "orders": {
+            "total": total_orders,
+            "active": active_orders,
+            "completed": completed_orders,
+            "today_check_in": today_check_in,
+            "today_check_out": today_check_out,
+        },
+        "revenue": {"paid_total": float(paid_total)},
+        "reminders": {"pending": pending_reminders, "due_soon": due_soon},
+        "knowledge": {
+            "documents": knowledge_documents,
+            "chunks": knowledge_chunks,
+        },
+    }
+
+
+def list_knowledge(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    page, page_size = _pagination(page, page_size)
+
+    query = db.query(KnowledgeChunk)
+    if keyword and keyword.strip():
+        like = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(
+                KnowledgeChunk.title.like(like),
+                KnowledgeChunk.content.like(like),
+                KnowledgeChunk.doc_id.like(like),
+            )
+        )
+
+    total = query.count()
+    rows = (
+        query.order_by(KnowledgeChunk.doc_id, KnowledgeChunk.chunk_index)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    items = []
+    for chunk in rows:
+        meta = chunk.meta or {}
+        items.append(
+            {
+                "id": chunk.id,
+                "doc_id": chunk.doc_id,
+                "chunk_index": chunk.chunk_index,
+                "title": chunk.title,
+                "category": meta.get("category"),
+                "source": meta.get("source"),
+                "content": chunk.content,
+                "has_embedding": bool(chunk.embedding),
+            }
+        )
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
     }
 
 
