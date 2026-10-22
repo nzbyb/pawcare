@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NEmpty, NSpin } from 'naive-ui'
+import { NButton, NEmpty, NSpin, useMessage } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
 import PetFormModal from '@/components/PetFormModal.vue'
-import { listHealthRecords, listReminders } from '@/api/health'
+import {
+  listHealthRecords,
+  listReminders,
+  updateReminder,
+} from '@/api/health'
 import { listPets } from '@/api/pets'
 import type { Pet, Reminder } from '@/types'
 import { daysUntil, dueLabel, formatDate, speciesLabel } from '@/utils/format'
@@ -19,11 +23,13 @@ interface ReminderRow {
 }
 
 const router = useRouter()
+const message = useMessage()
 
 const pets = ref<Pet[]>([])
 const reminderRows = ref<ReminderRow[]>([])
 const healthRecordCount = ref(0)
 const loading = ref(true)
+const reminderBusy = ref<{ id: number; action: 'done' | 'snooze' } | null>(null)
 
 const showPetModal = ref(false)
 const editingPet = ref<Pet | null>(null)
@@ -157,6 +163,40 @@ async function load(): Promise<void> {
   }
 }
 
+async function handleReminder(
+  row: ReminderRow,
+  action: 'done' | 'snooze',
+): Promise<void> {
+  if (reminderBusy.value) return
+  reminderBusy.value = { id: row.reminder.id, action }
+  try {
+    const updated = await updateReminder(
+      row.pet.id,
+      row.reminder.id,
+      action === 'done' ? { status: 'done' } : { snooze_days: 7 },
+    )
+    if (action === 'done') {
+      reminderRows.value = reminderRows.value.filter(
+        (item) => item.reminder.id !== row.reminder.id,
+      )
+      message.success('已标记完成')
+    } else {
+      reminderRows.value = reminderRows.value
+        .map((item) =>
+          item.reminder.id === row.reminder.id
+            ? { ...item, reminder: updated }
+            : item,
+        )
+        .sort((a, b) => a.reminder.due_date.localeCompare(b.reminder.due_date))
+      message.success('已延后 7 天')
+    }
+  } catch {
+    // 错误提示由 http 拦截器统一展示。
+  } finally {
+    reminderBusy.value = null
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -254,14 +294,34 @@ onMounted(load)
                 >
                   {{ dueLabel(row.reminder.due_date) }}
                 </span>
-                <n-button
-                  size="tiny"
-                  quaternary
-                  class="reminder-action"
-                  @click.stop="router.push(`/pets/${row.pet.id}`)"
-                >
-                  查看详情
-                </n-button>
+                <span class="reminder-actions">
+                  <n-button
+                    size="tiny"
+                    quaternary
+                    class="reminder-action"
+                    :loading="
+                      reminderBusy?.id === row.reminder.id &&
+                      reminderBusy.action === 'done'
+                    "
+                    :disabled="reminderBusy?.id === row.reminder.id"
+                    @click.stop="handleReminder(row, 'done')"
+                  >
+                    完成
+                  </n-button>
+                  <n-button
+                    size="tiny"
+                    quaternary
+                    class="reminder-action"
+                    :loading="
+                      reminderBusy?.id === row.reminder.id &&
+                      reminderBusy.action === 'snooze'
+                    "
+                    :disabled="reminderBusy?.id === row.reminder.id"
+                    @click.stop="handleReminder(row, 'snooze')"
+                  >
+                    延后
+                  </n-button>
+                </span>
               </span>
             </div>
           </div>
@@ -616,6 +676,12 @@ onMounted(load)
   gap: 6px;
 }
 
+.reminder-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .reminder-action {
   --n-height: 24px;
   --n-padding: 0 4px;
@@ -819,6 +885,10 @@ onMounted(load)
 @media (max-width: 520px) {
   .metrics {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reminder-side > .pill {
+    display: none;
   }
 
   .overview-actions {

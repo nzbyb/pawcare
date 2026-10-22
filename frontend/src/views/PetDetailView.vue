@@ -28,6 +28,7 @@ import {
   deleteHealthRecord,
   listHealthRecords,
   listReminders,
+  updateReminder,
 } from '@/api/health'
 import { addWeight, getPet, listWeights } from '@/api/pets'
 import PetFormModal from '@/components/PetFormModal.vue'
@@ -68,6 +69,7 @@ const showEdit = ref(false)
 const showHealthModal = ref(false)
 const showWeightModal = ref(false)
 const savingHealth = ref(false)
+const reminderBusy = ref<{ id: number; action: 'done' | 'snooze' } | null>(null)
 const savingWeight = ref(false)
 const chartRef = ref<HTMLDivElement | null>(null)
 
@@ -154,6 +156,34 @@ async function load(): Promise<void> {
     router.replace('/pets')
   } finally {
     loading.value = false
+  }
+}
+
+async function handleReminder(
+  reminder: Reminder,
+  action: 'done' | 'snooze',
+): Promise<void> {
+  if (!pet.value || reminderBusy.value) return
+  reminderBusy.value = { id: reminder.id, action }
+  try {
+    const updated = await updateReminder(
+      pet.value.id,
+      reminder.id,
+      action === 'done' ? { status: 'done' } : { snooze_days: 7 },
+    )
+    if (action === 'done') {
+      reminders.value = reminders.value.filter((item) => item.id !== reminder.id)
+      message.success('已标记完成')
+    } else {
+      reminders.value = reminders.value
+        .map((item) => (item.id === reminder.id ? updated : item))
+        .sort((a, b) => a.due_date.localeCompare(b.due_date))
+      message.success('已延后 7 天')
+    }
+  } catch {
+    // 错误提示由 http 拦截器统一展示。
+  } finally {
+    reminderBusy.value = null
   }
 }
 
@@ -491,6 +521,32 @@ onBeforeUnmount(() => {
                     :class="daysUntil(reminder.due_date) < 0 ? 'red' : 'sage'"
                   >
                     {{ dueLabel(reminder.due_date) }}
+                  </span>
+                  <span class="reminder-actions">
+                    <n-button
+                      size="tiny"
+                      secondary
+                      :loading="
+                        reminderBusy?.id === reminder.id &&
+                        reminderBusy.action === 'done'
+                      "
+                      :disabled="reminderBusy?.id === reminder.id"
+                      @click="handleReminder(reminder, 'done')"
+                    >
+                      完成
+                    </n-button>
+                    <n-button
+                      size="tiny"
+                      quaternary
+                      :loading="
+                        reminderBusy?.id === reminder.id &&
+                        reminderBusy.action === 'snooze'
+                      "
+                      :disabled="reminderBusy?.id === reminder.id"
+                      @click="handleReminder(reminder, 'snooze')"
+                    >
+                      延后 7 天
+                    </n-button>
                   </span>
                 </article>
               </div>
@@ -884,6 +940,13 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 
+.reminder-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
 .pill.red {
   background: var(--pc-danger-soft);
   color: var(--pc-danger);
@@ -926,6 +989,14 @@ onBeforeUnmount(() => {
 @media (max-width: 560px) {
   .hero-main {
     align-items: flex-start;
+  }
+
+  .reminder-item > .pill {
+    display: none;
+  }
+
+  .reminder-actions {
+    gap: 0;
   }
 
   .avatar {

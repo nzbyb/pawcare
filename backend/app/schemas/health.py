@@ -39,6 +39,11 @@ class HealthRecordResponse(BaseModel):
     create_time: datetime | None = None
 
 
+class ReminderUpdate(BaseModel):
+    status: Literal["done"] | None = None
+    snooze_days: int | None = Field(default=None, ge=1, le=90)
+
+
 class ReminderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

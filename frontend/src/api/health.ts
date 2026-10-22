@@ -26,3 +26,18 @@ export function deleteHealthRecord(recordId: number): Promise<void> {
 export function listReminders(petId: number): Promise<Reminder[]> {
   return request.get<Reminder[]>(`/pets/${petId}/reminders`)
 }
+
+export type ReminderUpdatePayload =
+  | { status: 'done' }
+  | { snooze_days: number }
+
+export function updateReminder(
+  petId: number,
+  reminderId: number,
+  payload: ReminderUpdatePayload,
+): Promise<Reminder> {
+  return request.patch<Reminder>(
+    `/pets/${petId}/reminders/${reminderId}`,
+    payload,
+  )
+}
