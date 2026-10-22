@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NInput } from 'naive-ui'
 
@@ -18,6 +18,8 @@ interface ChatBubble {
   toolEvents?: AgentToolEvent[]
   draft?: BoardingDraft | null
   traceId?: string
+  retry?: string
+  stopped?: boolean
 }
 
 const router = useRouter()
@@ -82,7 +84,13 @@ const sending = ref(false)
 const loadingHistory = ref(false)
 const streamingBubbleId = ref<number | null>(null)
 const bodyRef = ref<HTMLElement | null>(null)
+const copiedId = ref<number | null>(null)
+const now = ref(Date.now())
 let nextId = 1
+let activeController: AbortController | null = null
+let stopRequested = false
+let copyTimer: number | undefined
+let clockTimer: number | undefined
 
 const canSend = computed(() => input.value.trim().length > 0 && !sending.value)
 const showWelcome = computed(() => messages.value.length === 0 && !loadingHistory.value)
@@ -177,12 +185,31 @@ async function send(text?: string): Promise<void> {
 
   input.value = ''
   addMessage('user', content)
+  await runTurn(content)
+}
+
+async function retryMessage(bubble: ChatBubble): Promise<void> {
+  if (sending.value || !bubble.retry) return
+  const prompt = bubble.retry
+  messages.value = messages.value.filter((item) => item.id !== bubble.id)
+  await runTurn(prompt)
+}
+
+function stopGenerating(): void {
+  if (!sending.value) return
+  stopRequested = true
+  activeController?.abort()
+}
+
+async function runTurn(content: string): Promise<void> {
   sending.value = true
+  stopRequested = false
   await scrollToBottom()
 
   const streamState: { bubbleId: number | null } = { bubbleId: null }
   let completed = false
   const controller = new AbortController()
+  activeController = controller
   const timer = window.setTimeout(() => controller.abort(), 180_000)
 
   function ensureBubble(): ChatBubble {
@@ -256,32 +283,82 @@ async function send(text?: string): Promise<void> {
           streamingBubbleId.value = null
           void scrollToBottom()
         } else if (event === 'error') {
-          ensureBubble().content = String(
+          const target = ensureBubble()
+          target.content = String(
             data.message ?? '助手暂时不可用，请稍后再试。',
           )
+          target.retry = content
           streamingBubbleId.value = null
         }
       },
       { signal: controller.signal },
     )
     if (!completed) throw new Error('流式响应未完成')
-    await loadConversations()
   } catch {
     const failed =
       streamState.bubbleId === null
         ? undefined
         : messages.value.find((item) => item.id === streamState.bubbleId)
-    if (failed && !failed.content) {
+    if (stopRequested) {
+      if (failed) {
+        failed.stopped = true
+        failed.retry = content
+        if (!failed.content) failed.content = '已停止生成。'
+      } else {
+        addMessage('assistant', '已停止生成。', {
+          stopped: true,
+          retry: content,
+        })
+      }
+    } else if (failed && !failed.content) {
       failed.content = failureText
+      failed.retry = content
     } else if (!failed) {
-      addMessage('assistant', failureText)
+      addMessage('assistant', failureText, { retry: content })
     }
   } finally {
     window.clearTimeout(timer)
+    if (activeController === controller) activeController = null
     streamingBubbleId.value = null
     sending.value = false
+    // 停止或失败时用户消息可能已经落库，刷新一次侧栏。
+    void loadConversations()
     await scrollToBottom()
   }
+}
+
+async function copyMessage(bubble: ChatBubble): Promise<void> {
+  if (!bubble.content) return
+  try {
+    await navigator.clipboard.writeText(bubble.content)
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = bubble.content
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
+  copiedId.value = bubble.id
+  window.clearTimeout(copyTimer)
+  copyTimer = window.setTimeout(() => {
+    copiedId.value = null
+  }, 1500)
+}
+
+function draftRemaining(draft: BoardingDraft): number {
+  return Math.ceil((new Date(draft.expires_at).getTime() - now.value) / 60_000)
+}
+
+function draftExpired(draft: BoardingDraft): boolean {
+  return new Date(draft.expires_at).getTime() <= now.value
+}
+
+function draftHint(draft: BoardingDraft): string {
+  const minutes = draftRemaining(draft)
+  return minutes > 0 ? `剩余 ${minutes} 分钟` : '草稿已过期'
 }
 
 function onInputKeydown(event: KeyboardEvent): void {
@@ -296,6 +373,15 @@ function goConfirm(): void {
 
 onMounted(() => {
   void loadConversations()
+  clockTimer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 30_000)
+})
+
+onBeforeUnmount(() => {
+  window.clearInterval(clockTimer)
+  window.clearTimeout(copyTimer)
+  activeController?.abort()
 })
 </script>
 
@@ -425,15 +511,51 @@ onMounted(() => {
                   </div>
                 </div>
                 <div class="draft-foot">
-                  <span>15 分钟内有效，确认后才会生成订单</span>
-                  <n-button size="small" type="primary" @click="goConfirm">
-                    去寄养页确认
+                  <span>{{ draftHint(bubble.draft) }}，确认后才会生成订单</span>
+                  <n-button
+                    size="small"
+                    type="primary"
+                    :disabled="draftExpired(bubble.draft)"
+                    @click="goConfirm"
+                  >
+                    {{ draftExpired(bubble.draft) ? '草稿已过期' : '去寄养页确认' }}
                   </n-button>
                 </div>
               </div>
 
               <div v-if="bubble.traceId" class="trace">
                 追踪 ID · {{ bubble.traceId.slice(0, 8) }}
+              </div>
+
+              <div
+                v-if="
+                  bubble.role === 'assistant' &&
+                  bubble.content &&
+                  bubble.id !== streamingBubbleId
+                "
+                class="bubble-tools"
+              >
+                <button
+                  type="button"
+                  class="bubble-tool"
+                  @click="copyMessage(bubble)"
+                >
+                  {{ copiedId === bubble.id ? '已复制' : '复制' }}
+                </button>
+                <button
+                  v-if="bubble.retry"
+                  type="button"
+                  class="bubble-tool"
+                  @click="retryMessage(bubble)"
+                >
+                  重试
+                </button>
+                <span
+                  v-if="bubble.stopped && bubble.content !== '已停止生成。'"
+                  class="bubble-stopped"
+                >
+                  已停止生成
+                </span>
               </div>
             </div>
           </div>
@@ -457,10 +579,20 @@ onMounted(() => {
             @keydown="onInputKeydown"
           />
           <n-button
+            v-if="sending"
+            size="large"
+            secondary
+            class="stop-button"
+            @click="stopGenerating"
+          >
+            <template #icon><AppIcon name="stop" :size="14" /></template>
+            停止
+          </n-button>
+          <n-button
+            v-else
             type="primary"
             size="large"
             :disabled="!canSend"
-            :loading="sending"
             @click="send()"
           >
             <template #icon><AppIcon name="send" :size="15" /></template>
@@ -890,6 +1022,42 @@ onMounted(() => {
 
 .bubble.user .trace {
   color: rgba(255, 255, 255, 0.65);
+}
+
+.bubble-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.bubble-tool {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pc-ink-faint);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.bubble-tool:hover {
+  color: var(--pc-primary);
+}
+
+.bubble-tool:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--pc-primary);
+  outline-offset: 2px;
+}
+
+.bubble-stopped {
+  color: var(--pc-warn);
+  font-size: 11px;
+}
+
+.stop-button {
+  --n-text-color: var(--pc-danger);
 }
 
 .typing {
