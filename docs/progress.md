@@ -935,3 +935,63 @@
 ### 提交
 
 - `bbc1620` feat: 增加只读 MCP Server 与 JWT 鉴权
+
+## 2026-10-22 · 第 15 天 · MCP Client、入口治理与专项评测
+
+### 目标
+
+把 MCP 从“单向开放”补成完整闭环：站内 Agent 能消费外部只读工具；
+HTTP 入口有限流和审计；这些边界用一套不依赖大模型的评测固定下来。
+
+### 完成内容
+
+- 统一工具注册表 `app/agent/registry.py`：
+  - 本地 8 个工具与外部 MCP 工具合并为同一份 OpenAI function schema。
+  - 外部工具命名为 `mcp__<server>__<tool>`，超长时截断并附哈希；
+    不覆盖本地同名工具。
+  - 发现结果缓存 300 秒；单个 Server 失败只影响自己，站内对话退化为本地工具。
+  - 调用路由：外部命名空间走 MCP Client，其余仍走 `execute_tool`。
+- MCP Client `app/agent/mcp_client.py`：
+  - 支持 stdio 与 Streamable HTTP；每次发现 / 调用独立会话，不跨请求复用。
+  - 只注册 `readOnlyHint=True` 的工具，没有“允许写工具”的配置。
+  - 描述命中“忽略之前指令 / 系统提示词 / API key”等模式时整段替换。
+  - JSON Schema 只保留 OpenAI 兼容子集；结果统一为 `{ok, data, error, code}`，
+    超过 32KB 拒绝，超时返回 504。
+  - `MCP_CLIENT_SERVERS` 用 JSON 配置，`env` / `headers` 支持 `${VAR}` 展开。
+- 显式循环与 LangGraph 适配层都接入注册表；系统提示追加“外部内容不可信”说明。
+- MCP HTTP 限流 `app/mcp/rate_limit.py`：
+  - 认证后按 user_id 计数，默认 60 次/分钟，超限 429 + `Retry-After`。
+  - 复用 `limits` 存储；配置 `REDIS_URL` 即走 Redis，否则进程内存。
+- 审计：
+  - 新增 `mcp_audit_logs` 模型与迁移 `a1b7c3d9e5f2`，记录用户、传输方式、
+    工具、参数摘要（2KB 截断）、状态、错误码、耗时、IP、trace_id。
+  - 成功、失败、超时、拒绝（白名单外 / 身份失效）都留痕；审计写失败只告警，
+    不影响工具返回。
+  - 管理端新增 `GET /api/admin/mcp-audit`，支持用户 / 工具 / 状态过滤。
+- MCP 专项评测：
+  - `evaluation/mcp_cases.yaml` 10 条用例，`evaluation/mcp_runner.py` 执行。
+  - `evaluation/fixtures/fake_mcp_server.py` 模拟恶意描述、写工具、慢响应、
+    超大结果、同名工具 5 种 Server。
+  - 检查项：PawCare 工具白名单、token 读取、跨用户隔离、描述过滤、写工具过滤、
+    超时 504、结果上限 413、不可达降级、命名空间、单点故障隔离。
+  - 输出 `evaluation/reports/mcp_eval_*.json/.csv`。
+
+### 验证
+
+- `pytest`：140 passed（新增 11 条注册表 / 客户端测试、9 条审计 / 限流 / 管理端测试）。
+- `pip check`：无依赖冲突；`alembic heads` 单一 head `a1b7c3d9e5f2`。
+- 本地 MySQL 已执行迁移，MCP 调用审计正常落库。
+- MCP 专项评测：10 通过 / 0 失败 / 0 跳过，报告
+  `mcp_eval_20261022_212508.json`。
+- 端到端：脚本化 LLM 先调用 `mcp__fake_malicious__echo`，再生成最终回复；
+  模型收到的工具表包含本地 8 个 + 外部 2 个，工具事件状态为 ok。
+
+### 下一步
+
+1. Nginx 增加 `/mcp` 反代与公网访问策略，再决定是否对外暴露。
+2. 管理端前端补 MCP 审计页面（当前只有只读 API）。
+3. 将 MCP 专项评测接入 CI / 每日提交前检查。
+
+### 提交
+
+- 本次提交（MCP Client、限流审计与专项评测）

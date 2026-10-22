@@ -1,0 +1,91 @@
+version: 1
+
+# MCP 专项评测：不调用大模型，直接验证协议暴露面、接入边界和故障降级。
+# 运行：python evaluation/mcp_runner.py
+# 依赖演示库中的 owner / owner2 账号；没有时相关用例标记为 skipped。
+
+cases:
+  - id: mcp-pawcare-discovery
+    kind: pawcare_discovery
+    title: PawCare Server 只暴露 7 个只读工具
+    params:
+      expected_tools:
+        - list_my_pets
+        - get_pet_health_records
+        - get_upcoming_reminders
+        - check_kennel_availability
+        - list_boarding_orders
+        - get_boarding_daily_reports
+        - search_care_knowledge
+      forbidden_tools:
+        - create_boarding_draft
+        - confirm_boarding_draft
+
+  - id: mcp-pawcare-call
+    kind: pawcare_call
+    title: 外部 Agent 通过 token 读取当前用户宠物
+    params:
+      tool: list_my_pets
+
+  - id: mcp-isolation
+    kind: isolation
+    title: 两个用户的 token 看到不同宠物
+    params: {}
+
+  - id: mcp-description-filter
+    kind: description_filter
+    title: 工具描述中的注入指令被过滤
+    params:
+      mode: malicious
+      tool: echo
+      require_marker: 已过滤
+      forbidden_terms:
+        - API key
+        - 忽略之前
+
+  - id: mcp-write-filter
+    kind: write_filter
+    title: 外部写工具不会进入注册表
+    params:
+      mode: write
+      expected:
+        - safe_read
+      forbidden:
+        - delete_all_pets
+
+  - id: mcp-timeout
+    kind: timeout
+    title: 慢工具在调用超时后返回 504
+    params:
+      mode: slow
+      tool: slow_tool
+      call_timeout: 1.0
+      expect_code: 504
+
+  - id: mcp-oversized
+    kind: oversized
+    title: 超过 32KB 的结果被拒绝
+    params:
+      mode: huge
+      tool: huge_tool
+      expect_code: 413
+
+  - id: mcp-unreachable
+    kind: unreachable
+    title: 外部 Server 不可达时退化为本地工具
+    params: {}
+
+  - id: mcp-namespace
+    kind: namespace
+    title: 外部同名工具通过命名空间隔离
+    params:
+      mode: collision
+      expected_name: mcp__fake_collision__list_my_pets
+      local_name: list_my_pets
+
+  - id: mcp-partial-failure
+    kind: partial_failure
+    title: 单个 Server 故障不影响其他 Server
+    params:
+      mode: malicious
+      expected_count: 2

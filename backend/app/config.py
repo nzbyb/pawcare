@@ -66,8 +66,21 @@ class Settings(BaseSettings):
     AGENT_TIMEOUT_SECONDS: int = 30
     LLM_MAX_TOKENS: int = 1024
 
-    # MCP Server 单次工具调用超时；stdio 的 token 只从环境变量读取。
+    # ---------- MCP Server（对外提供能力） ----------
+    # 单次工具调用超时；stdio 的 token 只从环境变量读取。
     MCP_TOOL_TIMEOUT_SECONDS: int = 5
+    # 每个用户每分钟的 MCP HTTP 请求数；0 表示关闭。
+    MCP_RATE_LIMIT_PER_MINUTE: int = 60
+    # 是否把 MCP 调用写入 mcp_audit_logs。
+    MCP_AUDIT_ENABLED: bool = True
+
+    # ---------- MCP Client（接入外部 Server） ----------
+    # JSON 数组，示例见 .env.example；留空时站内 Agent 只使用本地工具。
+    MCP_CLIENT_SERVERS: str = ""
+    MCP_CLIENT_DISCOVERY_TIMEOUT_SECONDS: float = 3.0
+    MCP_CLIENT_CALL_TIMEOUT_SECONDS: float = 8.0
+    # 工具发现结果缓存时间，避免每轮对话都拉起 stdio 子进程。
+    MCP_CLIENT_CACHE_SECONDS: int = 300
 
     # RAG：向量以 JSON 文本存库，检索在应用层计算余弦相似度；MySQL / SQLite 通用。
     RAG_ENABLED: bool = True

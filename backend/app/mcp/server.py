@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import time
+from functools import partial
 from typing import Annotated, Literal
 from uuid import uuid4
 
@@ -31,12 +32,17 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app.agent.tools import ToolContext, execute_tool
 from app.config import settings
 from app.database import SessionLocal
+from app.mcp.audit import record as record_audit
+from app.mcp.audit import record_denied
 from app.mcp.auth import (
     MCPAuthError,
     MCPAuthMiddleware,
+    current_client_ip,
+    current_transport,
     current_user_id,
     set_stdio_user,
 )
+from app.mcp.rate_limit import build_rate_limiter
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -80,17 +86,57 @@ def _compact(**kwargs) -> dict:
     return {key: value for key, value in kwargs.items() if value is not None}
 
 
-def execute_read_tool(name: str, arguments: dict, user_id: int) -> dict:
-    """执行只读工具；HTTP 和 stdio 共用，测试也直接调用这里。"""
+def execute_read_tool(
+    name: str,
+    arguments: dict,
+    user_id: int,
+    *,
+    transport: str = "http",
+    ip: str | None = None,
+    trace_id: str | None = None,
+) -> dict:
+    """执行只读工具；HTTP 和 stdio 共用，测试也直接调用这里。
+
+    每次调用都会写一条 ``mcp_audit_logs``；被拒绝的调用也会留痕。
+    """
+    trace_id = trace_id or f"mcp-{uuid4().hex}"
+    started = time.perf_counter()
+
     if name not in READ_ONLY_TOOLS:
+        record_denied(
+            user_id=user_id,
+            transport=transport,
+            tool_name=name,
+            arguments=arguments if isinstance(arguments, dict) else None,
+            code=403,
+            ip=ip,
+            trace_id=trace_id,
+        )
         return {"ok": False, "error": f"工具未开放：{name}", "code": 403}
     if not isinstance(arguments, dict):
+        record_denied(
+            user_id=user_id,
+            transport=transport,
+            tool_name=name,
+            arguments=None,
+            code=400,
+            ip=ip,
+            trace_id=trace_id,
+        )
         return {"ok": False, "error": "工具参数必须是对象", "code": 400}
 
-    started = time.perf_counter()
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if user is None or user.status != 1:
+            record_denied(
+                user_id=user.id if user is not None else None,
+                transport=transport,
+                tool_name=name,
+                arguments=arguments,
+                code=401,
+                ip=ip,
+                trace_id=trace_id,
+            )
             return {"ok": False, "error": "用户不存在或已被禁用", "code": 401}
 
         result = execute_tool(
@@ -99,16 +145,28 @@ def execute_read_tool(name: str, arguments: dict, user_id: int) -> dict:
             name,
             arguments,
             ToolContext(
-                trace_id=f"mcp-{uuid4().hex}",
+                trace_id=trace_id,
                 tool_call_id=uuid4().hex,
                 idempotency_key=uuid4().hex,
             ),
         )
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        record_audit(
+            db,
+            user_id=user.id,
+            transport=transport,
+            tool_name=name,
+            arguments=arguments,
+            result=result,
+            elapsed_ms=elapsed_ms,
+            ip=ip,
+            trace_id=trace_id,
+        )
 
-    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
     logger.info(
-        "mcp_tool_call user_id=%s tool=%s ok=%s elapsed_ms=%s",
+        "mcp_tool_call user_id=%s transport=%s tool=%s ok=%s elapsed_ms=%s",
         user_id,
+        transport,
         name,
         result.get("ok"),
         elapsed_ms,
@@ -132,11 +190,17 @@ async def _call(name: str, arguments: dict, ctx: Context) -> str:
     except MCPAuthError as exc:
         return _json({"ok": False, "error": str(exc), "code": 401})
 
+    runner = partial(
+        execute_read_tool,
+        name,
+        arguments,
+        user_id,
+        transport=current_transport(ctx),
+        ip=current_client_ip(ctx),
+    )
     try:
         with anyio.fail_after(settings.MCP_TOOL_TIMEOUT_SECONDS):
-            result = await anyio.to_thread.run_sync(
-                execute_read_tool, name, arguments, user_id
-            )
+            result = await anyio.to_thread.run_sync(runner)
     except TimeoutError:
         logger.warning("mcp_tool_timeout tool=%s user_id=%s", name, user_id)
         return _json({"ok": False, "error": "工具执行超时", "code": 504})
@@ -318,7 +382,9 @@ def build_http_app() -> ASGIApp:
     """Streamable HTTP 入口：/mcp 需要 Bearer token，/health 不需要。"""
     global _http_inner
     if _http_inner is None:
-        _http_inner = MCPAuthMiddleware(mcp.streamable_http_app())
+        _http_inner = MCPAuthMiddleware(
+            mcp.streamable_http_app(), rate_limiter=build_rate_limiter()
+        )
     inner = _http_inner
 
     async def app(scope: Scope, receive: Receive, send: Send) -> None:

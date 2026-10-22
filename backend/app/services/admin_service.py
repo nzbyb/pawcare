@@ -14,6 +14,7 @@ from app.common.exceptions import BusinessException
 from app.models.audit import AuditLog
 from app.models.boarding import BoardingOrder, Kennel
 from app.models.knowledge import KnowledgeChunk
+from app.models.mcp import MCPAuditLog
 from app.models.pet import Pet
 from app.models.reminder import Reminder
 from app.models.user import User
@@ -436,6 +437,66 @@ def list_audit_logs(
                 "create_time": log.create_time,
             }
         )
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def list_mcp_audit(
+    db: Session,
+    *,
+    user_id: int | None = None,
+    tool: str | None = None,
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """MCP 调用审计：只读查询，按时间倒序。"""
+    page, page_size = _pagination(page, page_size)
+
+    query = db.query(MCPAuditLog, User).outerjoin(
+        User, MCPAuditLog.user_id == User.id
+    )
+    if user_id is not None:
+        query = query.filter(MCPAuditLog.user_id == user_id)
+    if tool and tool.strip():
+        query = query.filter(MCPAuditLog.tool_name == tool.strip())
+    if status and status.strip():
+        query = query.filter(MCPAuditLog.status == status.strip())
+
+    total = query.count()
+    rows = (
+        query.order_by(
+            MCPAuditLog.create_time.desc(), MCPAuditLog.id.desc()
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items = [
+        {
+            "id": log.id,
+            "user_id": log.user_id,
+            "user_name": (
+                (user.nickname or user.username) if user else "已删除用户"
+            ),
+            "username": user.username if user else None,
+            "transport": log.transport,
+            "tool_name": log.tool_name,
+            "arguments": log.arguments,
+            "status": log.status,
+            "error_code": log.error_code,
+            "elapsed_ms": log.elapsed_ms,
+            "ip": log.ip,
+            "trace_id": log.trace_id,
+            "create_time": log.create_time,
+        }
+        for log, user in rows
+    ]
     return {
         "items": items,
         "total": total,

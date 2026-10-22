@@ -19,6 +19,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.database import SessionLocal
+from app.mcp.rate_limit import MCPRateLimiter, RateLimitDecision
 from app.models.user import User
 from app.utils.jwt import decode_access_token
 
@@ -64,16 +65,21 @@ def set_stdio_user(token: str) -> int:
     return _stdio_user_id
 
 
+def _request_state(ctx: Context | None = None) -> dict:
+    if ctx is None:
+        return {}
+    request_context = getattr(ctx, "request_context", None)
+    request = getattr(request_context, "request", None)
+    if request is None:
+        return {}
+    return getattr(request, "scope", {}).get("state") or {}
+
+
 def current_user_id(ctx: Context | None = None) -> int:
     """按 HTTP 请求 → 上下文变量 → stdio 的顺序取当前用户。"""
-    if ctx is not None:
-        request_context = getattr(ctx, "request_context", None)
-        request = getattr(request_context, "request", None)
-        if request is not None:
-            state = getattr(request, "scope", {}).get("state") or {}
-            user_id = state.get("pawcare_user_id")
-            if user_id:
-                return int(user_id)
+    user_id = _request_state(ctx).get("pawcare_user_id")
+    if user_id:
+        return int(user_id)
 
     user_id = _current_user_id.get()
     if user_id:
@@ -83,14 +89,26 @@ def current_user_id(ctx: Context | None = None) -> int:
     raise MCPAuthError("未认证：请在 Authorization 头中携带 Bearer token")
 
 
+def current_transport(ctx: Context | None = None) -> str:
+    return str(_request_state(ctx).get("pawcare_transport") or "stdio")
+
+
+def current_client_ip(ctx: Context | None = None) -> str | None:
+    ip = _request_state(ctx).get("pawcare_client_ip")
+    return str(ip) if ip else None
+
+
 class MCPAuthMiddleware:
     """给 Streamable HTTP 入口加 Bearer 校验。
 
     纯 ASGI 实现，避免 BaseHTTPMiddleware 对长连接/流式响应的干扰。
     """
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(
+        self, app: ASGIApp, rate_limiter: MCPRateLimiter | None = None
+    ) -> None:
         self.app = app
+        self.rate_limiter = rate_limiter
 
     async def __call__(
         self, scope: Scope, receive: Receive, send: Send
@@ -102,6 +120,11 @@ class MCPAuthMiddleware:
         if scope.get("method") == "OPTIONS":
             await self.app(scope, receive, send)
             return
+
+        state = scope.setdefault("state", {})
+        state["pawcare_transport"] = "http"
+        client = scope.get("client")
+        state["pawcare_client_ip"] = client[0] if client else None
 
         headers = Headers(scope=scope)
         scheme, _, token = headers.get("authorization", "").partition(" ")
@@ -117,7 +140,15 @@ class MCPAuthMiddleware:
             await self._reject(scope, receive, send, str(exc))
             return
 
-        scope.setdefault("state", {})["pawcare_user_id"] = user_id
+        if self.rate_limiter is not None:
+            decision = await anyio.to_thread.run_sync(
+                self.rate_limiter.check, str(user_id)
+            )
+            if not decision.allowed:
+                await self._rate_limited(scope, receive, send, decision)
+                return
+
+        state["pawcare_user_id"] = user_id
         context_token = _current_user_id.set(user_id)
         try:
             await self.app(scope, receive, send)
@@ -131,5 +162,22 @@ class MCPAuthMiddleware:
             {"error": message},
             status_code=401,
             headers={"WWW-Authenticate": "Bearer"},
+        )
+        await response(scope, receive, send)
+
+    async def _rate_limited(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+        decision: RateLimitDecision,
+    ) -> None:
+        response = JSONResponse(
+            {"ok": False, "error": "请求过于频繁，请稍后再试", "code": 429},
+            status_code=429,
+            headers={
+                "Retry-After": str(decision.retry_after),
+                "X-RateLimit-Limit": str(decision.limit),
+            },
         )
         await response(scope, receive, send)

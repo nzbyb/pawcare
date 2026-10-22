@@ -19,6 +19,11 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.agent.prompts import build_system_prompt
+from app.agent.registry import (
+    EXTERNAL_TOOL_NOTICE,
+    ToolRegistry,
+    get_registry,
+)
 from app.agent.tools import TOOL_DEFINITIONS, ToolContext, execute_tool
 from app.common.exceptions import BusinessException
 from app.config import settings
@@ -167,10 +172,24 @@ def _idempotency_key(trace_id: str, tool_call_id: str) -> str:
     return f"agent-{digest[:40]}"
 
 
+async def load_tool_registry() -> ToolRegistry:
+    """加载外部 MCP 工具；失败时退化为只有本地工具。"""
+    registry = get_registry()
+    try:
+        await registry.ensure_loaded()
+    except Exception:
+        logger.exception("外部 MCP 工具发现失败，本轮只用本地工具")
+    return registry
+
+
 def _summarize(name: str, result: dict) -> str:
     if not result.get("ok"):
         return str(result.get("error") or "工具执行失败")
     data = result.get("data") or {}
+    if name.startswith("mcp__"):
+        if isinstance(data, dict):
+            return f"外部工具返回 {len(data)} 个字段"
+        return "外部工具执行完成"
     if name == "list_my_pets":
         return f"找到 {len(data.get('pets', []))} 只宠物"
     if name == "get_pet_health_records":
@@ -236,7 +255,15 @@ async def run_agent(
     trace_id: str,
     on_event: EventSink | None = None,
 ) -> AgentRunResult:
-    messages = [{"role": "system", "content": build_system_prompt(user)}, *history]
+    registry = await load_tool_registry()
+    external_definitions = registry.definitions()
+    tool_definitions = [*TOOL_DEFINITIONS, *external_definitions]
+
+    system_prompt = build_system_prompt(user)
+    if external_definitions:
+        system_prompt = f"{system_prompt}\n\n{EXTERNAL_TOOL_NOTICE}"
+
+    messages = [{"role": "system", "content": system_prompt}, *history]
     events: list[dict] = []
     draft_id: int | None = None
 
@@ -271,7 +298,7 @@ async def run_agent(
         await _emit(on_event, "llm_start", {"round": step + 1})
         try:
             response = await asyncio.wait_for(
-                llm.complete(messages, TOOL_DEFINITIONS),
+                llm.complete(messages, tool_definitions),
                 timeout=settings.AGENT_TIMEOUT_SECONDS + 5,
             )
         except asyncio.TimeoutError:
@@ -332,9 +359,14 @@ async def run_agent(
                     tool_call_id=call.id,
                     idempotency_key=_idempotency_key(trace_id, call.id),
                 )
-                result = execute_tool(
-                    db, user, call.name, call.arguments, context
-                )
+                if registry.handles(call.name):
+                    result = await registry.execute(
+                        call.name, call.arguments
+                    )
+                else:
+                    result = execute_tool(
+                        db, user, call.name, call.arguments, context
+                    )
                 tool_latency = int((time.perf_counter() - tool_started) * 1000)
                 result_text = json.dumps(result, ensure_ascii=False)
                 summary = _summarize(call.name, result)

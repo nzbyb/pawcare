@@ -17,7 +17,7 @@
 | 缓存/限流 | Redis 7（可选，未启动时退回进程内存） |
 | 鉴权 | JWT + bcrypt，三角色：宠物主 / 寄养员 / 管理员 |
 | Agent | 显式工具调用循环 + 步骤级 SSE（httpx + OpenAI 兼容接口）；附 LangGraph 对照适配层 |
-| 能力开放 | MCP 1.30（FastMCP），只读 Server，stdio / Streamable HTTP |
+| 能力开放 | MCP 1.30：只读 Server（stdio / Streamable HTTP）+ 站内 Agent 的只读 MCP Client |
 | RAG | fastembed + bge-small-zh-v1.5（512 维），向量以 JSON 文本存库，应用层余弦 + 词法混合检索 |
 | 定时 | APScheduler（单进程） |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
@@ -45,6 +45,9 @@ Agent 可以查疫苗、推荐笼舍、生成预约草稿；**用户在前端确
 - **可观测**：每轮对话记录 trace、工具参数、耗时、token 和错误码。
 - **可评测**：80–100 条 YAML 用例，baseline + 消融，输出 CSV / 图表。
 - **能力开放**：7 个只读工具通过 MCP Server 暴露，写操作仍留在站内确认流程。
+- **统一工具入口**：本地工具与外部 MCP 只读工具合并成同一份 function schema；
+  外部工具使用 `mcp__server__tool` 命名空间，描述过滤、结果限长、故障降级。
+- **入口治理**：MCP HTTP 按用户限流，每次调用写审计表，管理端可按用户 / 工具 / 状态查询。
 
 ## 4. 目录结构
 
@@ -223,6 +226,33 @@ python -m app.mcp.server --transport streamable-http --host 127.0.0.1 --port 876
 npx @modelcontextprotocol/inspector
 ```
 
+#### 接入外部 MCP（站内 Agent 作为 Client）
+
+Agent 也能反向消费别的 MCP Server。在 `backend/.env` 里配置
+`MCP_CLIENT_SERVERS`（JSON 数组），**只接受 `readOnlyHint=True` 的工具**：
+
+```bash
+# stdio：每次发现 / 调用单独拉起进程，token 用 ${VAR} 从环境变量取
+MCP_CLIENT_SERVERS=[{"name":"pawcare","transport":"stdio","command":"python","args":["-m","app.mcp.server","--transport","stdio"],"env":{"PAWCARE_MCP_TOKEN":"${PAWCARE_MCP_TOKEN}"}}]
+
+# 远程：Streamable HTTP
+MCP_CLIENT_SERVERS=[{"name":"remote","transport":"streamable-http","url":"https://example.com/mcp","headers":{"Authorization":"Bearer ${REMOTE_MCP_TOKEN}"}}]
+```
+
+- 外部工具以 `mcp__<server>__<tool>` 暴露给模型，不会覆盖本地同名工具。
+- 工具描述中的“忽略之前指令 / 系统提示词 / API key”等字样会被整段替换；
+  返回值超过 32KB 拒绝，调用超时（默认 8 秒）返回结构化错误。
+- 单个 Server 发现失败只影响它自己，站内对话退化为只用本地工具。
+- 外部工具返回的内容在系统提示里标记为不可信资料，不能据此触发写操作。
+
+#### 限流与审计
+
+- HTTP 入口按用户限流：默认 60 次/分钟（`MCP_RATE_LIMIT_PER_MINUTE`），
+  超限返回 429 + `Retry-After`；部署时配合 `REDIS_URL` 使用 Redis 计数。
+- 每次调用（含被拒绝的调用）写入 `mcp_audit_logs`：用户、传输方式、工具、
+  参数摘要、状态（ok / error / denied / timeout）、耗时、IP、trace_id。
+- 管理端查询：`GET /api/admin/mcp-audit?user_id=&tool=&status=&page=`。
+
 边界：
 
 - stdio 是单用户，token 在进程启动时固定；HTTP 每个请求校验 JWT，支持多用户。
@@ -264,6 +294,19 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 报告文件名和 JSON 会带引擎标识。主链路为什么选显式循环、两种实现的差异，
 见 [docs/architecture.md](docs/architecture.md#6-调度引擎选型)。
 
+MCP 专项评测不调用模型，直接验证工具发现、只读边界、身份隔离、描述注入、
+超时、结果上限和故障降级：
+
+```powershell
+.\.venv\Scripts\python.exe evaluation\mcp_runner.py --list
+.\.venv\Scripts\python.exe evaluation\mcp_runner.py
+.\.venv\Scripts\python.exe evaluation\mcp_runner.py --only mcp-timeout --strict
+```
+
+10 条检查覆盖 PawCare Server 与 5 种假 Server（恶意描述、写工具、慢响应、
+超大结果、同名工具）。输出 `evaluation/reports/mcp_eval_*.json/.csv`；演示库
+缺少 owner / owner2 账号时，依赖真实数据的三条用例标记为 skipped。
+
 ## 6. 环境变量
 
 真实密钥只放在 `.env`，不进仓库。模板见 `backend/.env.example` 和根目录 `.env.example`。
@@ -277,6 +320,11 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 | `LLM_BASE_URL` | `https://api.deepseek.com` |
 | `AGENT_ENGINE` | `explicit`（默认）/ `langgraph`（对照实验） |
 | `REDIS_URL` | 留空时使用进程内限流 |
+| `MCP_TOOL_TIMEOUT_SECONDS` | MCP Server 单次工具调用超时，默认 5 秒 |
+| `MCP_RATE_LIMIT_PER_MINUTE` | MCP HTTP 每用户每分钟请求上限，0 关闭 |
+| `MCP_AUDIT_ENABLED` | 是否写 `mcp_audit_logs`，默认 `true` |
+| `MCP_CLIENT_SERVERS` | 站内 Agent 接入的外部 MCP Server（JSON 数组） |
+| `MCP_CLIENT_CALL_TIMEOUT_SECONDS` | 外部工具单次调用超时，默认 8 秒 |
 | `RAG_ENABLED` | 是否启用知识库检索，默认 `true` |
 | `RAG_EMBEDDING_MODEL` | 默认 `BAAI/bge-small-zh-v1.5` |
 | `RAG_TOP_K` / `RAG_MIN_SCORE` | 返回片段数与混合检索阈值 |
@@ -327,7 +375,10 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 - [x] 管理控制台：运营概览、账号启停、笼舍占用、审计日志、只读知识库
 - [x] 寄养订单时间轴：预约 → 确认 → 入住 → 退房
 - [x] MCP Server：7 个只读工具、stdio / Streamable HTTP、JWT 校验、工具白名单
-- [x] 后端 pytest 120 条用例全部通过
+- [x] 统一工具注册表：本地 8 个 + 外部 MCP 只读工具（命名空间、注入过滤、故障降级）
+- [x] MCP HTTP 按用户限流 + `mcp_audit_logs` 调用审计 + 管理端查询
+- [x] MCP 专项评测：10 条检查（发现 / 隔离 / 注入 / 超时 / 结果上限 / 降级）
+- [x] 后端 pytest 140 条用例全部通过
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
 - [x] LangGraph 对照适配层（`AGENT_ENGINE` / 评测 `--engine`，生产默认显式循环）
 

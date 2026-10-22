@@ -245,9 +245,9 @@ MySQL 没有 PostgreSQL 的排他约束，因此不再建库级约束。
 
 ```text
 Claude Desktop / Cursor ──stdio──┐
-远程 MCP Client ──Streamable HTTP┴─→ MCPAuthMiddleware（JWT）
-                                      → current_user_id
-                                      → execute_read_tool（只读白名单）
+远程 MCP Client ──Streamable HTTP┴─→ MCPAuthMiddleware（JWT + 按用户限流）
+                                      → current_user_id（来自 token）
+                                      → execute_read_tool（只读白名单 + 审计）
                                       → app.agent.tools.execute_tool
                                       → 服务层（权限 / 行级过滤）
 ```
@@ -263,6 +263,40 @@ Claude Desktop / Cursor ──stdio──┐
 - **协议**：`mcp==1.30.0` + FastMCP；HTTP 使用 Streamable HTTP 的 stateless +
   JSON 响应模式，方便反向代理和 curl 调试。2.x 重命名 FastMCP 并要求
   starlette>=1，与 FastAPI 0.115 冲突，因此固定在 1.30。
+- **入口治理**：HTTP 在认证之后按 user_id 限流（默认 60 次/分钟，Redis 或进程
+  内存），超限返回 429；每次调用（含拒绝）写 `mcp_audit_logs`，记录参数摘要、
+  状态、耗时、IP 和 trace_id，管理端只读查询。
+
+### 5.11 MCP Client 与统一工具注册表
+
+站内 Agent 既用本地工具，也能接入其他 MCP Server。两条路径在调用模型之前
+合并成同一份 function schema：
+
+```text
+                    ┌─ 本地 8 个工具（TOOL_DEFINITIONS / execute_tool）
+Agent runtime ──────┤
+                    └─ 外部 MCP 只读工具（mcp__server__tool）
+                            ↑ ToolRegistry 发现 + 缓存
+                            │
+                 stdio / Streamable HTTP → 外部 MCP Server
+```
+
+- **只读是硬门槛**：只注册 `annotations.readOnlyHint is True` 的工具，没有
+  “允许外部写工具”的开关；写操作仍只有本地 `create_boarding_draft`。
+- **命名空间**：外部工具统一加 `mcp__<server>__<tool>` 前缀，超过 64 字符时
+  截断并附哈希，避免覆盖本地工具或超出模型函数名限制。
+- **不可信描述**：外部工具描述先压缩空白、截断，命中“忽略之前指令 / 系统提示词 /
+  API key”等模式时整段替换，不让工具描述成为注入入口。
+- **不可信返回值**：结果统一转成站内 `{ok, data, error, code}`；超过 32KB 拒绝，
+  调用超时返回 504，协议错误返回 502。系统提示额外声明外部内容不得当作指令。
+- **故障降级**：单个 Server 发现失败只影响它自己，注册表继续提供本地工具和
+  其他 Server 的工具；发现结果缓存 300 秒，避免每轮对话拉起子进程。
+- **配置与密钥**：`MCP_CLIENT_SERVERS` 是 JSON 数组，`env` / `headers` 支持
+  `${VAR}` 展开，token 只放环境变量，不写进仓库。
+
+两种调度引擎共用这套注册表：显式循环在 `runtime.run_agent` 里合并 schema，
+LangGraph 适配层通过参数拿到同一个注册表，评测变体对 `TOOL_DEFINITIONS` 的
+monkeypatch 仍然生效。
 
 ## 6. 调度引擎选型
 
@@ -277,7 +311,8 @@ loop:
     if tool_calls and 未超过轮次上限:
         持久化 assistant(tool_calls)
         for call in tool_calls:
-            execute_tool(...) → 持久化 tool message + trace
+            registry.execute(...) 或 execute_tool(...)
+                → 持久化 tool message + trace
     else:
         持久化最终回复，返回
 ```

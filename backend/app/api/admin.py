@@ -85,6 +85,28 @@ def get_kennel_occupancy(
     return Response.success(data=admin_service.kennel_occupancy(db, day))
 
 
+@router.get("/mcp-audit", response_model=Response)
+def list_mcp_audit(
+    user_id: int | None = Query(default=None, ge=1),
+    tool: str | None = Query(default=None, max_length=64),
+    status: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        data=admin_service.list_mcp_audit(
+            db,
+            user_id=user_id,
+            tool=tool,
+            status=status,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
 @router.get("/audit-logs", response_model=Response)
 def list_audit_logs(
     action: str | None = Query(default=None, max_length=50),

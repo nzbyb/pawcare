@@ -29,6 +29,7 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.orm import Session
 
 from app.agent import runtime
+from app.agent.registry import ToolRegistry
 from app.agent.runtime import AgentRunResult, EventSink, LLMClient, ToolCall
 from app.agent.tools import ToolContext
 from app.config import settings
@@ -69,9 +70,15 @@ def build_graph(
     llm: LLMClient,
     trace_id: str,
     on_event: EventSink | None = None,
+    registry: ToolRegistry | None = None,
 ):
     """按请求构建并编译状态图；节点通过闭包拿到 db / user / llm。"""
     max_tool_rounds = max(1, settings.AGENT_MAX_TOOL_CALLS)
+
+    def tool_definitions() -> list[dict]:
+        # 运行时读取 runtime.TOOL_DEFINITIONS，评测变体的 monkeypatch 仍然生效。
+        external = registry.definitions() if registry else []
+        return [*runtime.TOOL_DEFINITIONS, *external]
 
     async def agent_node(state: AgentState) -> AgentState:
         round_no = state.get("round", 0) + 1
@@ -81,7 +88,7 @@ def build_graph(
         started = time.perf_counter()
         try:
             response = await asyncio.wait_for(
-                llm.complete(messages, runtime.TOOL_DEFINITIONS),
+                llm.complete(messages, tool_definitions()),
                 timeout=settings.AGENT_TIMEOUT_SECONDS + 5,
             )
         except asyncio.TimeoutError:
@@ -180,9 +187,14 @@ def build_graph(
                 tool_call_id=call.id,
                 idempotency_key=runtime._idempotency_key(trace_id, call.id),
             )
-            result = runtime.execute_tool(
-                db, user, call.name, call.arguments, context
-            )
+            if registry and registry.handles(call.name):
+                result = await registry.execute(
+                    call.name, call.arguments
+                )
+            else:
+                result = runtime.execute_tool(
+                    db, user, call.name, call.arguments, context
+                )
             tool_latency = int((time.perf_counter() - tool_started) * 1000)
             result_text = json.dumps(result, ensure_ascii=False)
 
@@ -276,10 +288,13 @@ async def run_agent(
     on_event: EventSink | None = None,
 ) -> AgentRunResult:
     """与 ``runtime.run_agent`` 同签名的 LangGraph 实现。"""
-    messages = [
-        {"role": "system", "content": runtime.build_system_prompt(user)},
-        *history,
-    ]
+    registry = await runtime.load_tool_registry()
+    system_prompt = runtime.build_system_prompt(user)
+    if registry.definitions():
+        system_prompt = (
+            f"{system_prompt}\n\n{runtime.EXTERNAL_TOOL_NOTICE}"
+        )
+    messages = [{"role": "system", "content": system_prompt}, *history]
     initial: AgentState = {
         "messages": messages,
         "round": 0,
@@ -300,6 +315,7 @@ async def run_agent(
         llm=llm,
         trace_id=trace_id,
         on_event=on_event,
+        registry=registry,
     )
     # 每个 agent / tools / finish 节点各占一步；留出余量避免长工具链撞默认上限。
     max_steps = 2 * (max(1, settings.AGENT_MAX_TOOL_CALLS) + 2) + 5
