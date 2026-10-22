@@ -934,4 +934,4 @@
 
 ### 提交
 
-- 本次提交（MCP Server）
+- `bbc1620` feat: 增加只读 MCP Server 与 JWT 鉴权
