@@ -72,6 +72,15 @@ const highlights = [
   { title: '智能助手', text: '用一句话查档案、问注意事项、预约寄养。' },
 ]
 
+// 答辩演示用：一键填入合成账号。建站时设 VITE_DEMO_ACCOUNTS=false 可整体隐藏。
+const showDemoAccounts = import.meta.env.VITE_DEMO_ACCOUNTS !== 'false'
+
+const demoAccounts = [
+  { role: '宠物主', username: 'owner', password: 'Owner12345' },
+  { role: '寄养员', username: 'staff', password: 'Staff12345' },
+  { role: '管理员', username: 'admin', password: 'Admin12345' },
+]
+
 const contactLabel = computed(() =>
   registerForm.channel === 'email' ? '邮箱' : '手机号',
 )
@@ -129,6 +138,12 @@ function redirectAfterLogin(): void {
   const redirect =
     typeof route.query.redirect === 'string' ? route.query.redirect : '/'
   router.replace(redirect)
+}
+
+function fillDemoAccount(account: (typeof demoAccounts)[number]): void {
+  loginForm.username = account.username
+  loginForm.password = account.password
+  message.success(`已填入${account.role}演示账号，点击“登录”即可进入`)
 }
 
 async function handleLogin(): Promise<void> {
@@ -369,6 +384,30 @@ function openAgreement(tab: 'terms' | 'privacy'): void {
                 连续 5 次密码错误将锁定账号 15 分钟；登录失败不会提示账号是否存在。
               </p>
             </n-form>
+
+            <div v-if="showDemoAccounts" class="demo-accounts">
+              <div class="demo-head">
+                <span>演示账号</span>
+                <span class="demo-note">合成数据 · 点击填入</span>
+              </div>
+              <ul class="demo-list">
+                <li v-for="item in demoAccounts" :key="item.username">
+                  <button
+                    type="button"
+                    class="demo-row"
+                    @click="fillDemoAccount(item)"
+                  >
+                    <span class="demo-role">{{ item.role }}</span>
+                    <span class="demo-cred">
+                      <code>{{ item.username }}</code>
+                      <span class="demo-sep">/</span>
+                      <code>{{ item.password }}</code>
+                    </span>
+                    <span class="demo-action">填入</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
           </n-tab-pane>
 
           <n-tab-pane name="register" tab="注册">
@@ -823,6 +862,98 @@ function openAgreement(tab: 'terms' | 'privacy'): void {
   color: var(--pc-ink-faint);
   font-size: 11px;
   line-height: 1.65;
+}
+
+.demo-accounts {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--pc-line);
+}
+
+.demo-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.demo-note {
+  color: var(--pc-ink-faint);
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
+.demo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.demo-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--pc-line);
+  border-radius: 8px;
+  background: var(--pc-bg);
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.demo-row:hover {
+  border-color: var(--pc-primary);
+  background: var(--pc-surface);
+}
+
+.demo-row:focus-visible {
+  outline: 2px solid var(--pc-primary);
+  outline-offset: 2px;
+}
+
+.demo-role {
+  color: var(--pc-ink-soft);
+  font-size: 11.5px;
+}
+
+.demo-cred {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--pc-ink-soft);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.demo-cred code {
+  color: var(--pc-ink);
+  font-family: var(--pc-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+}
+
+.demo-sep {
+  color: var(--pc-ink-faint);
+}
+
+.demo-action {
+  color: var(--pc-primary);
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .form-tip {

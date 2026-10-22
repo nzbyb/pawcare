@@ -4,6 +4,9 @@ WORKDIR /app
 
 # 国内服务器可传 --build-arg NPM_REGISTRY=https://registry.npmmirror.com
 ARG NPM_REGISTRY=https://registry.npmjs.org
+# 登录页的演示账号入口：设 false 可整体隐藏（Vite 变量在构建时固化）
+ARG VITE_DEMO_ACCOUNTS=true
+ENV VITE_DEMO_ACCOUNTS=$VITE_DEMO_ACCOUNTS
 
 COPY package*.json ./
 RUN npm ci --registry="$NPM_REGISTRY"
