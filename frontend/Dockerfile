@@ -2,8 +2,11 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
+# 国内服务器可传 --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
 COPY package*.json ./
-RUN npm install
+RUN npm ci --registry="$NPM_REGISTRY"
 
 COPY . .
 RUN npm run build

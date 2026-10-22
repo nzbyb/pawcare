@@ -140,12 +140,31 @@ npm run dev
 ### 5.3 Docker Compose
 
 ```bash
-copy .env.example .env
+copy .env.example .env      # Windows
+cp .env.example .env        # Linux / macOS
 docker compose up -d --build
+docker compose ps
 ```
 
-后端容器启动时先执行 `alembic upgrade head`，再启动 uvicorn；`.env` 不进入镜像。
-知识库模型缓存在 `backend/.fastembed_cache`，首次检索会下载 BGE 模型。
+- 后端容器启动时先执行 `alembic upgrade head`，再启动 uvicorn；`.env` 不进入镜像。
+- 前端默认 `http://localhost:8080`，`/api` 与 `/uploads` 由容器内 Nginx 反代到
+  backend；MySQL / Redis / 后端只绑定 `127.0.0.1`，不会暴露到局域网或公网。
+- 服务器上把根目录 `.env` 的 `FRONTEND_PORT` 改成 `80`，即可直接用公网 IP 访问。
+- 国内网络构建慢时，在根目录 `.env` 打开 `APT_MIRROR` / `PIP_INDEX_URL` /
+  `NPM_REGISTRY` 三行（模板里给了阿里云和 npmmirror 地址）；拉不到 Docker Hub
+  镜像时给 `/etc/docker/daemon.json` 配 `registry-mirrors` 后重启 Docker。
+- `frontend/nginx.conf` 对 `/api` 关闭了 `proxy_buffering`，否则助手 SSE 会被
+  缓冲成一整块，步骤轨迹无法逐条显示。
+- 知识库模型缓存在 `backend/.fastembed_cache`，首次检索会下载 BGE 模型；
+  挂载后重建镜像不必重复下载。
+
+演示数据与排查：
+
+```bash
+docker compose exec backend python scripts/seed.py
+docker compose logs -f backend
+docker compose exec backend python -m alembic current
+```
 
 ### 5.4 Agent 评测
 

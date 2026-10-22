@@ -1,7 +1,11 @@
+# 固定项目名：目录名含中文时 Docker 推导不出合法项目名。
+name: pawcare
+
 services:
   mysql:
     image: mysql:8.4
     container_name: pawcare-mysql
+    restart: unless-stopped
     environment:
       MYSQL_DATABASE: pawcare
       MYSQL_USER: pawcare
@@ -12,8 +16,8 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     ports:
-      # 本机已有 MySQL 占用 3306 时，容器走 3307。
-      - "3307:3306"
+      # 只监听本机，避免把数据库端口暴露到公网。
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -29,8 +33,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: pawcare-redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -40,7 +45,11 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     container_name: pawcare-backend
+    restart: unless-stopped
     env_file:
       - ./backend/.env
     environment:
@@ -48,7 +57,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       TZ: Asia/Shanghai
     ports:
-      - "8000:8000"
+      # 前端 Nginx 会代理 /api；直接访问 API 只对本机开放。
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend/uploads:/app/uploads
       # 首次检索会下载 BGE 模型；挂载后重建镜像不必重新下载。
@@ -58,15 +68,36 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   frontend:
     build:
       context: ./frontend
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     container_name: pawcare-frontend
+    restart: unless-stopped
     ports:
-      - "8080:80"
+      # 本地默认 8080；服务器上设 FRONTEND_PORT=80 直接对外。
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
 volumes:
   mysql_data:
