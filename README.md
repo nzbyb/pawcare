@@ -17,6 +17,7 @@
 | 缓存/限流 | Redis 7（可选，未启动时退回进程内存） |
 | 鉴权 | JWT + bcrypt，三角色：宠物主 / 寄养员 / 管理员 |
 | Agent | 显式工具调用循环 + 步骤级 SSE（httpx + OpenAI 兼容接口）；附 LangGraph 对照适配层 |
+| 能力开放 | MCP 1.30（FastMCP），只读 Server，stdio / Streamable HTTP |
 | RAG | fastembed + bge-small-zh-v1.5（512 维），向量以 JSON 文本存库，应用层余弦 + 词法混合检索 |
 | 定时 | APScheduler（单进程） |
 | 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
@@ -43,6 +44,7 @@ Agent 可以查疫苗、推荐笼舍、生成预约草稿；**用户在前端确
 - **不可信上下文**：知识库、宠物备注都按不可信数据处理，配合注入测试。
 - **可观测**：每轮对话记录 trace、工具参数、耗时、token 和错误码。
 - **可评测**：80–100 条 YAML 用例，baseline + 消融，输出 CSV / 图表。
+- **能力开放**：7 个只读工具通过 MCP Server 暴露，写操作仍留在站内确认流程。
 
 ## 4. 目录结构
 
@@ -166,7 +168,72 @@ docker compose logs -f backend
 docker compose exec backend python -m alembic current
 ```
 
-### 5.4 Agent 评测
+### 5.4 MCP Server
+
+PawCare 把 7 个只读领域工具通过 MCP 开放给外部 Agent。工具复用
+`app/agent/tools.py` 的服务层，身份只来自 token；`create_boarding_draft`
+和确认接口都不在 MCP 工具表中。
+
+工具：`list_my_pets`、`get_pet_health_records`、`get_upcoming_reminders`、
+`check_kennel_availability`、`list_boarding_orders`、
+`get_boarding_daily_reports`、`search_care_knowledge`。
+
+stdio（本地 Claude Desktop / Cursor）：
+
+```bash
+# 先登录拿 JWT
+curl -s http://127.0.0.1:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"owner","password":"Owner12345"}'
+
+# 把 data.token 注入环境变量后启动
+set PAWCARE_MCP_TOKEN=<token>
+python -m app.mcp.server --transport stdio
+```
+
+Claude Desktop 配置示例（Windows）：
+
+```json
+{
+  "mcpServers": {
+    "pawcare": {
+      "command": "E:\\毕设\\backend\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "app.mcp.server", "--transport", "stdio"],
+      "env": {
+        "PAWCARE_MCP_TOKEN": "<token>",
+        "PYTHONPATH": "E:\\毕设\\backend"
+      }
+    }
+  }
+}
+```
+
+Streamable HTTP（远程 / 多用户）：
+
+```bash
+python -m app.mcp.server --transport streamable-http --host 127.0.0.1 --port 8765
+
+# POST /mcp，Authorization: Bearer <JWT>
+# GET  /health 不需要认证
+```
+
+可以用 MCP Inspector 验证工具列表和调用：
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+边界：
+
+- stdio 是单用户，token 在进程启动时固定；HTTP 每个请求校验 JWT，支持多用户。
+- MCP 只读；写操作仍然只能走“生成草稿 → 用户在前端确认”。
+- MCP 的 Streamable HTTP 使用 `json_response=True` 关闭了 SSE；这和站内 Agent
+  的步骤级 SSE 是两条独立的链路。
+- 单次工具调用超时 5 秒（`MCP_TOOL_TIMEOUT_SECONDS`），结果超过 32KB 直接拒绝。
+- 公网部署时建议只监听 `127.0.0.1`，由 Nginx 增加 `/mcp` 反代并关闭缓冲；
+  当前 ECS 部署没有对外暴露 MCP 端口。
+
+### 5.5 Agent 评测
 
 ```powershell
 cd backend
@@ -259,7 +326,8 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 - [x] 图片上传：宠物头像、日报照片（魔数识别、10MB 上限、UUID 文件名）
 - [x] 管理控制台：运营概览、账号启停、笼舍占用、审计日志、只读知识库
 - [x] 寄养订单时间轴：预约 → 确认 → 入住 → 退房
-- [x] 后端 pytest 111 条用例全部通过
+- [x] MCP Server：7 个只读工具、stdio / Streamable HTTP、JWT 校验、工具白名单
+- [x] 后端 pytest 120 条用例全部通过
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
 - [x] LangGraph 对照适配层（`AGENT_ENGINE` / 评测 `--engine`，生产默认显式循环）
 

@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     AGENT_TIMEOUT_SECONDS: int = 30
     LLM_MAX_TOKENS: int = 1024
 
+    # MCP Server 单次工具调用超时；stdio 的 token 只从环境变量读取。
+    MCP_TOOL_TIMEOUT_SECONDS: int = 5
+
     # RAG：向量以 JSON 文本存库，检索在应用层计算余弦相似度；MySQL / SQLite 通用。
     RAG_ENABLED: bool = True
     RAG_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"

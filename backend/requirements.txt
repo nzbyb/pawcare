@@ -1,5 +1,8 @@
 fastapi==0.115.13
+starlette==0.46.2
 uvicorn[standard]==0.34.0
+# mcp 2.x 重命名了 FastMCP 并要求 starlette>=1，和 FastAPI 0.115 不兼容。
+mcp==1.30.0
 sqlalchemy==2.0.41
 alembic==1.20.0
 pydantic-settings==2.7.1

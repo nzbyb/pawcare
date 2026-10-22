@@ -239,6 +239,31 @@ MySQL 没有 PostgreSQL 的排他约束，因此不再建库级约束。
 - `SCHEDULER_ENABLED=false` 可关闭；pytest 在 `conftest.py` 里关闭，避免线程在临时
   SQLite 上并发写。
 
+### 5.10 MCP 能力开放
+
+`app/mcp/` 把领域能力开放给外部 Agent，而不是复制一套业务逻辑：
+
+```text
+Claude Desktop / Cursor ──stdio──┐
+远程 MCP Client ──Streamable HTTP┴─→ MCPAuthMiddleware（JWT）
+                                      → current_user_id
+                                      → execute_read_tool（只读白名单）
+                                      → app.agent.tools.execute_tool
+                                      → 服务层（权限 / 行级过滤）
+```
+
+- **只读**：白名单只有 7 个查询工具；`create_boarding_draft` 不在白名单，
+  确认接口也没有注册。外部客户端无法创建、确认或取消订单。
+- **身份**：与 REST 接口同一套校验（签名、过期、`users.status`、`token_version`）；
+  工具参数里没有 `user_id`。stdio 在启动时解析一次 token，HTTP 每请求校验 Bearer。
+- **复用**：MCP 调用 `execute_tool`，和站内 Agent 共用服务层权限与行级过滤，
+  避免出现“站内拦住了、MCP 没拦住”的第二套规则。
+- **不可信输入输出**：知识片段继续按不可信资料处理并要求标注来源；工具结果限制
+  32KB，单次调用 5 秒超时，失败返回结构化错误而不是抛出协议异常。
+- **协议**：`mcp==1.30.0` + FastMCP；HTTP 使用 Streamable HTTP 的 stateless +
+  JSON 响应模式，方便反向代理和 curl 调试。2.x 重命名 FastMCP 并要求
+  starlette>=1，与 FastAPI 0.115 冲突，因此固定在 1.30。
+
 ## 6. 调度引擎选型
 
 ### 6.1 主实现：显式工具调用循环

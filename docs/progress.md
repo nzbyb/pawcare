@@ -887,3 +887,51 @@
 - 无头 Edge 经 SSH 隧道检查工作台、宠物档案、管理概览，1440px 下布局正常。
 - 公网 80 尚未放行：check-host.net 三个外部节点均为 Connect timeout，
   需要在阿里云安全组添加入方向规则（TCP 80），容器内部链路已经验证通过。
+
+## 2026-10-22 · 第 14 天 · MCP Server 能力开放
+
+### 目标
+
+在不复制业务逻辑的前提下，把 PawCare 的领域能力开放给外部 Agent；
+只读、身份可校验、写操作仍然留在站内确认流程。
+
+### 完成内容
+
+- 新增 `backend/app/mcp/`：
+  - `server.py`：FastMCP Server，暴露 7 个只读工具（宠物、健康记录、提醒、
+    笼舍空档、订单、日报、护理知识），工具逻辑复用 `execute_tool`。
+  - `auth.py`：stdio 从 `PAWCARE_MCP_TOKEN` 解析一次；Streamable HTTP 每请求
+    校验 `Authorization: Bearer <JWT>`，校验签名、过期、用户状态和
+    `token_version`。中间件把 user_id 写进 ASGI scope，工具参数里没有 `user_id`。
+- 只读边界：白名单之外的 `create_boarding_draft` 直接返回 403；
+  确认接口本来就不在工具表中。
+- 传输：
+  - stdio：适合 Claude Desktop / Cursor 本地接入，单用户。
+  - Streamable HTTP：`/mcp` 多用户，`/health` 免认证；stateless + JSON 响应，
+    方便反向代理和 curl 调试。
+- 稳定性与审计：单次调用 5 秒超时（`MCP_TOOL_TIMEOUT_SECONDS`）、结果 32KB 上限、
+  每次调用记录 user_id / tool / ok / elapsed_ms；知识片段继续按不可信资料处理。
+- 依赖：固定 `mcp==1.30.0` 与 `starlette==0.46.2`。mcp 2.x 把 FastMCP 改名为
+  MCPServer 并要求 starlette>=1，与 FastAPI 0.115 冲突。
+- 文档：README 增加 MCP 配置与 Inspector 用法，architecture 增加 5.10，
+  项目简介同步进度。
+
+### 验证
+
+- `pytest`：120 passed（新增 9 条 MCP 测试：工具白名单、schema 与本地定义一致、
+  按 token 隔离、跨用户隔离、拒绝草稿、Bearer 校验、禁用用户、stdio 往返）。
+- stdio 端到端：MCP 客户端 `initialize → tools/list → call_tool`，列出 7 个工具，
+  `list_my_pets` 返回当前用户的宠物。
+- Streamable HTTP 端到端：`/health` 200；无 token 401；Bearer 后
+  `tools/list` 7 个工具、`list_my_pets` 返回当前用户宠物。
+- 未改动前端，`npm run typecheck` / `build` 不需要重跑。
+
+### 下一步
+
+1. MCP Client：让站内 Agent 通过统一 ToolRegistry 消费外部 MCP 工具。
+2. 给 HTTP 入口加限流和审计表；公网暴露前补 Nginx `/mcp` 反代。
+3. 评测补 MCP 场景：工具发现、恶意工具描述、超时回退。
+
+### 提交
+
+- 本次提交（MCP Server）
