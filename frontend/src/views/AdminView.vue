@@ -554,6 +554,8 @@ function changeKnowledgePage(page: number): void {
 function onTabChange(name: string | number): void {
   if (name === 'overview') {
     void loadOverview()
+  } else if (name === 'users') {
+    void loadUsers()
   } else if (name === 'kennels') {
     void loadOccupancy()
   } else if (name === 'audit') {
@@ -708,10 +710,11 @@ onMounted(() => {
               :bordered="false"
               :scroll-x="820"
               size="small"
-            />
-            <div v-if="!usersLoading && !users.length" class="empty-wrap">
-              <n-empty description="没有匹配的账号" />
-            </div>
+            >
+              <template #empty>
+                <n-empty description="没有匹配的账号" />
+              </template>
+            </n-data-table>
           </n-spin>
         </div>
 
