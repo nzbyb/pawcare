@@ -850,3 +850,40 @@
 - `npm run typecheck`、`npm run build` 通过。
 - 无头 Edge：宠物列表与详情显示照片；管理端概览 12 张统计卡；知识库 14 个切片
   正常分页，标题与文档 ID 堆叠、摘要单行截断。
+
+## 2026-10-22 · 第 13 天（续）· 服务器部署验证
+
+### 环境
+
+- 阿里云 ECS：Ubuntu 22.04，2 核 / 3.5G 内存 / 40G 系统盘，公网 `121.196.150.159`
+- Docker CE 29.9.2 + Compose v5.6.1；镜像拉取走 DaoCloud / 1ms 加速，
+  构建使用阿里云 apt / pip 源与 npmmirror
+- 代码部署在 `/opt/pawcare`；MySQL、Redis、后端只绑定 `127.0.0.1`，前端监听 80
+- BGE 模型缓存（91MB）单独上传到 `backend/.fastembed_cache`，服务器无法直连
+  HuggingFace 也能离线检索
+
+### 过程中发现并修复的问题
+
+1. 项目目录名含中文时 Compose 推导不出合法项目名 → 在 `docker-compose.yml`
+   顶部固定 `name: pawcare`。
+2. Nginx 的静态资源正则 `location ~* \.(png|jpg|...)$` 优先于 `/uploads/` 前缀，
+   上传后的图片经 Nginx 访问 404，而直连后端正常 → 给 `/api/`、`/uploads/`
+   加 `^~`，让前缀匹配优先。
+3. SSE 需要 `proxy_buffering off`，否则助手步骤会被缓冲成一整块；实测事件从
+   0.02s 到 2.31s 逐条到达，确认未缓冲。
+
+### 验证结果
+
+- 四个容器均为 healthy；Alembic 五个迁移在容器启动时全部执行。
+- `seed.py`：4 个账号、3 只宠物、5 间笼舍、3 笔订单、14 篇护理知识。
+- 经 Nginx 验证：首页 200、登录 200、宠物列表、管理概览
+  （4 账号 / 3 宠物 / 3 订单 / 实收 ¥352 / 14 个知识切片）、知识库分页正常。
+- 上传：1×1 PNG 上传成功，返回 `/uploads/pet/...png`，经 Nginx 访问
+  `200 image/png`（修复前为 404）。
+- RAG：容器内 `search("猫换粮拉软便怎么办")` 返回 `hybrid` 2 条片段，
+  模型从挂载缓存加载成功。
+- Agent SSE：`start → llm_start/end → 3 次 tool → llm → assistant → done`，
+  真实 DeepSeek 调用，工具轨迹完整。
+- 无头 Edge 经 SSH 隧道检查工作台、宠物档案、管理概览，1440px 下布局正常。
+- 公网 80 尚未放行：check-host.net 三个外部节点均为 Connect timeout，
+  需要在阿里云安全组添加入方向规则（TCP 80），容器内部链路已经验证通过。

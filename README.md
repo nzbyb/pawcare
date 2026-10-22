@@ -253,7 +253,7 @@ baseline / 消融用同一套用例切换变体（`full` / `no_tools` / `no_rag`
 - [x] RAG：14 篇护理知识、混合检索、来源标注、拒答与注入防护
 - [x] 评测 harness：91 条 YAML 用例、隔离评测库、JSON / CSV 报告
 - [x] Alembic 初始迁移（MySQL）、向量存库 + 应用层余弦检索、订单档期冲突校验
-- [ ] Docker Compose 启动验证（本机 Docker daemon 未运行）
+- [x] Docker Compose 部署验证（ECS 上四容器 healthy；公网访问需在安全组放行 TCP 80）
 - [x] 模拟支付收银台：二维码、扫码页、回调幂等、超时关单、订单支付状态
 - [x] 通知中心：站内通知、偏好开关、健康提醒完成 / 延后、每日 08:00 定时补发
 - [x] 图片上传：宠物头像、日报照片（魔数识别、10MB 上限、UUID 文件名）
