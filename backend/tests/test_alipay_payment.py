@@ -242,6 +242,27 @@ def test_mock_notify_is_disabled_for_alipay(
     assert resp.json()["message"] == "模拟支付已关闭"
 
 
+def test_raw_base64_key_files_are_supported(tmp_path):
+    """支付宝密钥工具导出的文件常常只有一行 base64，没有 PEM 头尾。"""
+    keys = _keypair(tmp_path, "raw")
+    private_path = tmp_path / "raw_private.pem"
+    public_path = tmp_path / "raw_public.pem"
+    private_path.write_text(
+        "".join(keys["private_pem"].splitlines()[1:-1]), encoding="utf-8"
+    )
+    public_path.write_text(
+        "".join(keys["public_pem"].splitlines()[1:-1]), encoding="utf-8"
+    )
+
+    private_key = alipay.load_private_key(str(private_path))
+    public_key = alipay.load_public_key(str(public_path))
+    assert private_key.key_size == 2048
+    assert (
+        private_key.public_key().public_numbers().n
+        == public_key.public_numbers().n
+    )
+
+
 class FakeResponse:
     def __init__(self, text: str):
         self.text = text

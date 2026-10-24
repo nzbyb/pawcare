@@ -36,7 +36,11 @@ class AlipayError(Exception):
 
 
 def _ensure_pem(value: str, kind: str, header: str | None = None) -> str:
-    """把 PEM、路径和裸 base64 统一成 PEM 文本。"""
+    """把 PEM、路径和裸 base64 统一成 PEM 文本。
+
+    文件里也可能只有一行 base64（支付宝密钥工具默认导出格式），
+    读出来之后要继续走补头尾的逻辑。
+    """
     text = (value or "").strip()
     if not text:
         raise AlipayError(f"未配置{kind}")
@@ -46,7 +50,12 @@ def _ensure_pem(value: str, kind: str, header: str | None = None) -> str:
 
     path = Path(text)
     if path.is_file():
-        return path.read_text(encoding="utf-8").strip()
+        content = path.read_text(encoding="utf-8-sig").strip()
+        if not content:
+            raise AlipayError(f"{kind}文件为空")
+        if "BEGIN" in content:
+            return content.replace("\\n", "\n").strip()
+        text = content
 
     body = "\n".join(text[i : i + 64] for i in range(0, len(text), 64))
     header = header or ("PRIVATE KEY" if kind == "应用私钥" else "PUBLIC KEY")
