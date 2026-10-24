@@ -320,7 +320,8 @@ onBeforeUnmount(() => {
       <div v-else class="pay-channel" :class="{ dimmed: !isActive }">
         <span class="pay-channel-name">支付宝</span>
         <p v-if="isActive" class="pay-hint">
-          点击下方按钮跳转支付宝沙箱收银台，付款后回到本页
+          跳转沙箱收银台后，用「登录账户付款」登录沙箱买家账号即可完成；
+          手机扫码需要沙箱版支付宝 App
         </p>
         <p v-else-if="isPaid" class="pay-hint">支付已完成</p>
         <p v-else class="pay-hint">支付单已关闭，请重新生成</p>
@@ -382,7 +383,8 @@ onBeforeUnmount(() => {
 
       <p class="pay-note">
         <template v-if="isAlipay">
-          支付宝沙箱环境，不产生真实扣款。回调会验签并核对金额，
+          支付宝沙箱环境，不产生真实扣款。收银台二维码只能用沙箱版支付宝
+          App 扫描，正式 App 会提示「二维码失效」；回调会验签并核对金额，
           重复通知不会重复入账。
         </template>
         <template v-else>
