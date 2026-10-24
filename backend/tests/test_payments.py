@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
+from sqlalchemy.orm.attributes import set_committed_value
+
+from app.database import SessionLocal
 from app.models.payment import PaymentOrder
+from app.services import payment_service
 from tests.test_boarding import create_draft, create_kennel, day
 from tests.test_pets import create_pet
 
@@ -176,3 +180,59 @@ def test_cancelled_order_cannot_pay(client, owner_headers, admin_headers):
 
     resp = create_payment(client, owner_headers, order["id"])
     assert resp.json()["code"] == 409
+
+
+def test_settle_paid_twice_keeps_payment_paid(
+    client, owner_headers, admin_headers, db
+):
+    """重复核销同一张支付单，不能把它从 paid 改成 closed。"""
+    order = make_order(client, owner_headers, admin_headers)
+    payment = create_payment(client, owner_headers, order["id"]).json()["data"]
+    token = token_of(payment)
+    paid = client.post(
+        "/api/payments/mock/notify",
+        json={"payment_no": payment["payment_no"], "token": token},
+    ).json()["data"]
+    assert paid["status"] == "paid"
+
+    db.expire_all()
+    row = (
+        db.query(PaymentOrder)
+        .filter(PaymentOrder.payment_no == payment["payment_no"])
+        .one()
+    )
+    # 模拟并发下第二次核销（异步通知与主动查单撞在一起）。
+    payment_service._settle_paid(
+        db, row, transaction_id="MOCK-DUP", payload={"source": "dup"}
+    )
+    db.commit()
+    db.refresh(row)
+    assert row.status == "paid"
+
+
+def test_locked_read_refreshes_stale_payment_snapshot(
+    client, owner_headers, admin_headers, db
+):
+    """锁行读取必须覆盖会话里缓存的旧状态，否则会重复核销。"""
+    order = make_order(client, owner_headers, admin_headers)
+    payment = create_payment(client, owner_headers, order["id"]).json()["data"]
+    token = token_of(payment)
+
+    other = SessionLocal()
+    try:
+        payment_service.mock_notify(other, payment["payment_no"], token)
+    finally:
+        other.close()
+
+    db.commit()
+    stale = (
+        db.query(PaymentOrder)
+        .filter(PaymentOrder.payment_no == payment["payment_no"])
+        .one()
+    )
+    assert stale.status == "paid"
+    # 伪造并发请求里读到的旧快照：只改内存，不标记为待写库。
+    set_committed_value(stale, "status", "created")
+
+    locked = payment_service._get_payment(db, payment["payment_no"])
+    assert locked.status == "paid"

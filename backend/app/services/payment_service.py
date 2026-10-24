@@ -256,6 +256,10 @@ def _get_payment(db: Session, payment_no: str) -> PaymentOrder:
     payment = (
         db.query(PaymentOrder)
         .filter(PaymentOrder.payment_no == payment_no)
+        # 同一请求里可能先读过 PaymentOrder 的旧快照；锁行时不刷新的话，
+        # ORM 会把缓存里的 created 当成最新状态，并发的查单/通知就会
+        # 把已经支付的单再核销一次，最后落到「已关闭」。
+        .populate_existing()
         .with_for_update()
         .first()
     )
@@ -318,6 +322,12 @@ def _settle_paid(
     )
     if not order:
         raise BusinessException(message="订单不存在", code=404)
+
+    if payment.status == "paid":
+        # 这张单本身已经核销过（重复回调、并发的通知与查单）。
+        # 订单也是 paid，下面「订单已付」的分支会把它关掉，必须先返回。
+        db.commit()
+        return
 
     payment.notify_payload = payload
     if order.payment_status == "paid":
@@ -436,14 +446,7 @@ def handle_alipay_notify(db: Session, form: dict) -> None:
     if not payment_no:
         raise BusinessException(message="支付宝通知缺少商户订单号", code=400)
 
-    payment = (
-        db.query(PaymentOrder)
-        .filter(PaymentOrder.payment_no == payment_no)
-        .with_for_update()
-        .first()
-    )
-    if not payment:
-        raise BusinessException(message="支付单不存在", code=404)
+    payment = _get_payment(db, payment_no)
     if payment.channel != "alipay":
         raise BusinessException(message="支付单渠道不匹配", code=400)
 
