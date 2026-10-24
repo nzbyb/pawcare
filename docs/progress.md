@@ -1062,3 +1062,44 @@ HTTP 入口有限流和审计；这些边界用一套不依赖大模型的评测
 
 - `ab7996a` feat: 接入支付宝沙箱电脑网站支付
 
+## 2026-10-24 · 第 16 天（续）· 修复支付宝请求签名
+
+### 现象
+
+填入真实沙箱 APPID、应用私钥、支付宝公钥后，网关对所有请求返回
+`40002 isv.invalid-signature`；控制台里的应用公钥、APPID 均已核对无误。
+
+### 定位
+
+- 用社区 SDK `python-alipay-sdk` 发同一笔 `alipay.trade.query` 能通过（返回
+  `ACQ.TRADE_NOT_EXIST`），说明 APPID 与密钥本身有效。
+- 网关错误信息会回显它生成的待验签串，其中包含 `sign_type=RSA2`。
+  对照 SDK 源码，它签的正是含 `sign_type` 的串；本项目 `sign_content`
+  却把 `sign_type` 剔除了——之前只对比了「同一段字符串的签名结果」，
+  所以没发现差异。
+- 分别用含 / 不含 `sign_type` 的待签名串请求网关：含的返回
+  `ACQ.TRADE_NOT_EXIST`，不含的返回 `isv.invalid-signature`，确认根因。
+
+### 修复
+
+- `sign_content` 只剔除 `sign` 和空值，保留 `sign_type`，用于请求签名与
+  请求验签；新增 `notify_content` 单独剔除 `sign` / `sign_type`，
+  异步通知验签走它（支付宝通知的规则与请求不同）。
+- 生成收银台地址的签名随之修正；`alipay.trade.page.pay` 实测能打开沙箱
+  收银台登录页，`alipay.trade.query` 能正常返回业务结果。
+- `tests/conftest.py` 显式固定 `PAYMENT_PROVIDER=mock`，避免本机 `.env`
+  切到支付宝后影响既有支付用例。
+- 新增回归用例：请求待签名串必须包含 `sign_type`；按请求规则签的通知必须
+  验签失败。
+
+### 验证
+
+- `pytest`：150 passed。
+- 沙箱网关实测：`POST` / `GET` 查单均被接受；响应节点签名能用
+  `secrets/alipay_public.pem` 验过；收银台页面可正常打开。
+
+### 下一步
+
+1. 用沙箱买家账号完成一笔真实付款，确认主动查单核销和订单状态。
+2. ECS 配置 `PUBLIC_BASE_URL`、上传密钥，验证公网异步通知。
+

@@ -21,6 +21,10 @@ os.environ["SCHEDULER_ENABLED"] = "false"
 os.environ["SMTP_HOST"] = ""
 os.environ["SMTP_USER"] = ""
 os.environ["SMTP_PASSWORD"] = ""
+# 测试默认走模拟支付，避免本机 .env 切到支付宝后影响用例。
+# 支付宝渠道的用例在 test_alipay_payment.py 里单独 monkeypatch。
+os.environ["PAYMENT_PROVIDER"] = "mock"
+os.environ["PAYMENT_MOCK_BASE_URL"] = "http://localhost:5173"
 
 import pytest
 from fastapi.testclient import TestClient

@@ -99,7 +99,21 @@ def load_public_key(value: str) -> rsa.RSAPublicKey:
 
 
 def sign_content(params: dict[str, Any]) -> str:
-    """待签名串：剔除 sign / sign_type 和空值，按 key 升序拼接。"""
+    """请求待签名串：剔除 sign 和空值，按 key 升序拼接。
+
+    请求签名必须保留 sign_type——网关生成的验签串里也带着
+    sign_type=RSA2，漏掉它会一律返回 isv.invalid-signature。
+    """
+    items = [
+        (key, str(value))
+        for key, value in params.items()
+        if key != "sign" and value not in (None, "")
+    ]
+    return "&".join(f"{key}={value}" for key, value in sorted(items))
+
+
+def notify_content(params: dict[str, Any]) -> str:
+    """异步通知待验签串：支付宝的通知验签要剔除 sign 和 sign_type。"""
     items = [
         (key, str(value))
         for key, value in params.items()
@@ -109,7 +123,10 @@ def sign_content(params: dict[str, Any]) -> str:
 
 
 def sign_params(params: dict[str, Any], private_key: str) -> str:
-    content = sign_content(params)
+    return _sign_text(sign_content(params), private_key)
+
+
+def _sign_text(content: str, private_key: str) -> str:
     key = load_private_key(private_key)
     signature = key.sign(
         content.encode("utf-8"),
@@ -119,21 +136,30 @@ def sign_params(params: dict[str, Any], private_key: str) -> str:
     return base64.b64encode(signature).decode("ascii")
 
 
-def verify_params(params: dict[str, Any], public_key: str) -> bool:
-    signature = params.get("sign")
-    if not signature:
-        return False
-    content = sign_content(params).encode("utf-8")
+def _verify_text(content: str, signature: str, public_key: str) -> bool:
     try:
         decoded = base64.b64decode(signature, validate=True)
     except (ValueError, TypeError):
         return False
     key = load_public_key(public_key)
     try:
-        key.verify(decoded, content, padding.PKCS1v15(), hashes.SHA256())
+        key.verify(
+            decoded,
+            content.encode("utf-8"),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
     except InvalidSignature:
         return False
     return True
+
+
+def verify_params(params: dict[str, Any], public_key: str) -> bool:
+    """校验我们自己生成的请求签名（含 sign_type）。"""
+    signature = params.get("sign")
+    if not signature:
+        return False
+    return _verify_text(sign_content(params), signature, public_key)
 
 
 def timestamp() -> str:
@@ -188,10 +214,12 @@ def verify_notify(form: dict[str, Any], public_key: str) -> bool:
     if form.get("sign_type") not in (None, "", "RSA2"):
         return False
     sign = form.get("sign")
-    if isinstance(sign, str) and " " in sign:
+    if not isinstance(sign, str) or not sign:
+        return False
+    if " " in sign:
         # 表单解码会把 base64 里的 "+" 变成空格，验签前还原。
-        form = {**form, "sign": sign.replace(" ", "+")}
-    return verify_params(form, public_key)
+        sign = sign.replace(" ", "+")
+    return _verify_text(notify_content(form), sign, public_key)
 
 
 def _extract_node(text: str, key: str) -> str:

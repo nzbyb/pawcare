@@ -101,7 +101,8 @@ def _notify_form(payment: dict, alipay_private_pem: str, **overrides) -> dict:
         "sign_type": "RSA2",
     }
     form.update(overrides)
-    form["sign"] = alipay.sign_params(form, alipay_private_pem)
+    # 支付宝异步通知的待验签串不含 sign / sign_type。
+    form["sign"] = _sign_text(alipay.notify_content(form), alipay_private_pem)
     return form
 
 
@@ -122,6 +123,8 @@ def test_create_alipay_payment_signs_page_pay_url(
     assert params["app_id"] == APP_ID
     assert params["notify_url"] == "https://pawcare.test/api/payments/alipay/notify"
     assert payment["payment_no"] in params["return_url"]
+    # 请求签名必须把 sign_type 也算进去，否则网关会报 isv.invalid-signature。
+    assert "sign_type=RSA2" in alipay.sign_content(params)
     assert alipay.verify_params(params, alipay_env["app"]["public_pem"])
 
     content = json.loads(params["biz_content"])
@@ -225,6 +228,17 @@ def test_alipay_notify_rejects_bad_signature_and_app_id(
         app_id="2021999999999999",
     )
     assert client.post("/api/payments/alipay/notify", data=other_app).text == "failure"
+
+    # 通知验签的待签串不含 sign_type；按请求签名规则签出来的必须被拒绝。
+    request_style = _notify_form(payment, alipay_env["alipay"]["private_pem"])
+    request_style["sign"] = _sign_text(
+        alipay.sign_content(request_style),
+        alipay_env["alipay"]["private_pem"],
+    )
+    assert (
+        client.post("/api/payments/alipay/notify", data=request_style).text
+        == "failure"
+    )
 
 
 def test_mock_notify_is_disabled_for_alipay(
