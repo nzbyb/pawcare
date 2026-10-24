@@ -20,6 +20,7 @@ class PaymentResponse(BaseModel):
     amount: float
     status: Literal["created", "paying", "paid", "closed"]
     qr_content: str
+    pay_url: str | None = None
     expires_at: datetime
     owner_id: int
     paid_at: datetime | None = None
@@ -36,4 +37,5 @@ class PublicPaymentResponse(BaseModel):
     amount: float
     status: Literal["created", "paying", "paid", "closed"]
     qr_content: str
+    pay_url: str | None = None
     expires_at: datetime

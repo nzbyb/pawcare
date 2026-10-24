@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   NButton,
   NModal,
@@ -13,6 +13,7 @@ import {
   createPayment,
   getPayment,
   mockNotify,
+  refreshPayment,
   type Payment,
 } from '@/api/payments'
 import type { BoardingOrder } from '@/types'
@@ -45,15 +46,33 @@ function isCurrent(seq: number): boolean {
   return !disposed && seq === loadSeq && props.show
 }
 
-const token = computed(() => {
-  const content = payment.value?.qr_content
-  if (!content) return ''
+// 模拟渠道的 token 在二维码内容里；支付宝渠道在 return_url 里。
+function extractToken(url: string): string {
+  if (!url) return ''
   try {
-    return new URL(content).searchParams.get('token') ?? ''
+    const parsed = new URL(url)
+    const direct = parsed.searchParams.get('token')
+    if (direct) return direct
+    const returnUrl = parsed.searchParams.get('return_url')
+    if (returnUrl) {
+      return new URL(returnUrl).searchParams.get('token') ?? ''
+    }
   } catch {
-    return ''
+    // 非 URL 内容直接忽略。
   }
-})
+  return ''
+}
+
+const token = computed(
+  () =>
+    extractToken(payment.value?.pay_url ?? '') ||
+    extractToken(payment.value?.qr_content ?? ''),
+)
+
+const isAlipay = computed(() => payment.value?.channel === 'alipay')
+const payLink = computed(
+  () => payment.value?.pay_url || payment.value?.qr_content || '',
+)
 
 const isActive = computed(
   () => payment.value?.status === 'created' || payment.value?.status === 'paying',
@@ -166,10 +185,49 @@ async function handleMockPay(): Promise<void> {
   }
 }
 
-async function copyLink(): Promise<void> {
-  if (!payment.value) return
+function openAlipay(): void {
+  if (!payLink.value) return
+  const opened = window.open(payLink.value, '_blank')
+  if (opened) {
+    // 新窗口不能反向操作本项目页面。
+    opened.opener = null
+  } else {
+    message.warning('浏览器拦截了新窗口，请允许弹窗后重试')
+  }
+}
+
+async function checkPaid(silent = false): Promise<void> {
+  if (!payment.value || paying.value) return
+  if (!silent) paying.value = true
   try {
-    await navigator.clipboard.writeText(payment.value.qr_content)
+    const latest = await refreshPayment(payment.value.payment_no)
+    payment.value = latest
+    if (latest.status === 'paid') {
+      handlePaid()
+    } else if (latest.status === 'closed') {
+      stopTimers()
+      if (!silent) message.warning('支付单已关闭，请重新生成')
+    } else if (!silent) {
+      message.info('还没有收到支付结果，请稍候再试')
+    }
+  } catch {
+    // 拦截器已提示
+  } finally {
+    if (!silent) paying.value = false
+  }
+}
+
+// 从支付宝收银台切回本页时主动查单，比等待异步通知更快。
+function onWindowFocus(): void {
+  if (props.show && isAlipay.value && isActive.value) {
+    void checkPaid(true)
+  }
+}
+
+async function copyLink(): Promise<void> {
+  if (!payLink.value) return
+  try {
+    await navigator.clipboard.writeText(payLink.value)
     message.success('支付链接已复制')
   } catch {
     message.warning('浏览器不允许复制，请手动选中链接')
@@ -201,10 +259,15 @@ watch(
   },
 )
 
+onMounted(() => {
+  window.addEventListener('focus', onWindowFocus)
+})
+
 onBeforeUnmount(() => {
   disposed = true
   loadSeq += 1
   stopTimers()
+  window.removeEventListener('focus', onWindowFocus)
 })
 </script>
 
@@ -239,7 +302,7 @@ onBeforeUnmount(() => {
         <n-tag size="small" :type="statusMeta.type">{{ statusMeta.label }}</n-tag>
       </div>
 
-      <div class="pay-qr" :class="{ dimmed: !isActive }">
+      <div v-if="!isAlipay" class="pay-qr" :class="{ dimmed: !isActive }">
         <n-qr-code
           :value="payment.qr_content"
           :size="168"
@@ -254,6 +317,15 @@ onBeforeUnmount(() => {
         <p v-else class="pay-hint">二维码已过期，请重新生成</p>
       </div>
 
+      <div v-else class="pay-channel" :class="{ dimmed: !isActive }">
+        <span class="pay-channel-name">支付宝</span>
+        <p v-if="isActive" class="pay-hint">
+          点击下方按钮跳转支付宝沙箱收银台，付款后回到本页
+        </p>
+        <p v-else-if="isPaid" class="pay-hint">支付已完成</p>
+        <p v-else class="pay-hint">支付单已关闭，请重新生成</p>
+      </div>
+
       <dl class="pay-meta">
         <div>
           <dt>支付单号</dt>
@@ -266,18 +338,39 @@ onBeforeUnmount(() => {
       </dl>
 
       <div class="pay-actions">
+        <template v-if="isActive">
+          <template v-if="isAlipay">
+            <n-button type="primary" size="large" block @click="openAlipay">
+              前往支付宝支付
+            </n-button>
+            <n-button
+              size="large"
+              block
+              :loading="paying"
+              @click="checkPaid()"
+            >
+              我已完成支付
+            </n-button>
+          </template>
+          <n-button
+            v-else
+            type="primary"
+            size="large"
+            block
+            :loading="paying"
+            :disabled="!token"
+            @click="handleMockPay"
+          >
+            模拟扫码支付成功
+          </n-button>
+        </template>
         <n-button
-          v-if="isActive"
+          v-else-if="isClosed"
           type="primary"
           size="large"
           block
-          :loading="paying"
-          :disabled="!token"
-          @click="handleMockPay"
+          @click="loadPayment"
         >
-          模拟扫码支付成功
-        </n-button>
-        <n-button v-else-if="isClosed" type="primary" size="large" block @click="loadPayment">
           重新生成支付单
         </n-button>
       </div>
@@ -288,8 +381,14 @@ onBeforeUnmount(() => {
       </div>
 
       <p class="pay-note">
-        当前为模拟收银台，不产生真实资金。支付回调会校验二维码凭证，
-        并保证重复通知不会重复入账。
+        <template v-if="isAlipay">
+          支付宝沙箱环境，不产生真实扣款。回调会验签并核对金额，
+          重复通知不会重复入账。
+        </template>
+        <template v-else>
+          当前为模拟收银台，不产生真实资金。支付回调会校验二维码凭证，
+          并保证重复通知不会重复入账。
+        </template>
       </p>
     </template>
   </n-modal>
@@ -351,6 +450,31 @@ onBeforeUnmount(() => {
 
 .pay-qr.dimmed {
   opacity: 0.55;
+}
+
+.pay-channel {
+  display: flex;
+  min-height: 128px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 18px 0 14px;
+  padding: 16px;
+  border: 1px solid var(--pc-line);
+  border-radius: var(--pc-radius);
+  background: #fff;
+}
+
+.pay-channel.dimmed {
+  opacity: 0.55;
+}
+
+.pay-channel-name {
+  color: var(--pc-primary);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .pay-hint {

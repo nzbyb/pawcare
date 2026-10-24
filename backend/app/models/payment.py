@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -49,6 +49,9 @@ class PaymentOrder(Base):
     )
     qr_content: Mapped[str] = mapped_column(
         String(255), nullable=False, comment="二维码内容"
+    )
+    pay_url: Mapped[str | None] = mapped_column(
+        Text, comment="渠道收银台地址（支付宝签名 URL 较长，单独存）"
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, index=True, comment="支付截止时间"

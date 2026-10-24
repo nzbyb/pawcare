@@ -5,8 +5,9 @@ import { NButton, NSpin, NTag, useMessage } from 'naive-ui'
 
 import AppLogo from '@/components/AppLogo.vue'
 import {
-  getMockPayment,
+  getPublicPayment,
   mockNotify,
+  refreshPublicPayment,
   type PublicPayment,
 } from '@/api/payments'
 
@@ -20,6 +21,7 @@ const errorText = ref('')
 const remaining = ref(0)
 
 let tickTimer: number | null = null
+let pollTimer: number | null = null
 
 const paymentNo = computed(() => String(route.params.paymentNo ?? ''))
 const token = computed(() => {
@@ -27,6 +29,8 @@ const token = computed(() => {
   return typeof value === 'string' ? value : ''
 })
 
+const isAlipay = computed(() => payment.value?.channel === 'alipay')
+const payLink = computed(() => payment.value?.pay_url || '')
 const isActive = computed(
   () => payment.value?.status === 'created' || payment.value?.status === 'paying',
 )
@@ -61,6 +65,18 @@ function stopTick(): void {
   }
 }
 
+function stopPoll(): void {
+  if (pollTimer !== null) {
+    window.clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+function stopTimers(): void {
+  stopTick()
+  stopPoll()
+}
+
 async function load(): Promise<void> {
   if (!paymentNo.value || !token.value) {
     errorText.value = '支付链接不完整，请回到订单页重新获取二维码'
@@ -70,12 +86,43 @@ async function load(): Promise<void> {
   loading.value = true
   errorText.value = ''
   try {
-    payment.value = await getMockPayment(paymentNo.value, token.value)
-    if (isActive.value) startTick()
+    payment.value = await getPublicPayment(paymentNo.value, token.value)
+    if (isActive.value) {
+      startTick()
+      startPoll()
+      // 从支付宝收银台跳回来时异步通知可能还没到，先主动查一次。
+      if (isAlipay.value) void checkStatus(true)
+    }
   } catch {
     errorText.value = '支付单不存在或凭证已失效'
   } finally {
     loading.value = false
+  }
+}
+
+function startPoll(): void {
+  stopPoll()
+  // 异步通知到达后页面没有别的通道，只能低频轮询展示结果。
+  pollTimer = window.setInterval(() => void checkStatus(true), 5000)
+}
+
+async function checkStatus(silent = false): Promise<void> {
+  if (!payment.value || paying.value) return
+  if (!isActive.value || !token.value) return
+  if (!silent) paying.value = true
+  try {
+    const latest = await refreshPublicPayment(payment.value.payment_no, token.value)
+    payment.value = latest
+    if (latest.status === 'paid') {
+      stopTimers()
+      if (!silent) message.success('支付成功')
+    } else if (latest.status === 'closed') {
+      stopTimers()
+    }
+  } catch {
+    // 通知延迟或网络抖动时保持原状态，下一轮再试。
+  } finally {
+    if (!silent) paying.value = false
   }
 }
 
@@ -84,7 +131,7 @@ async function confirmPay(): Promise<void> {
   paying.value = true
   try {
     payment.value = await mockNotify(payment.value.payment_no, token.value)
-    stopTick()
+    stopTimers()
     message.success('支付成功')
   } catch {
     // 拦截器已提示
@@ -95,7 +142,7 @@ async function confirmPay(): Promise<void> {
 }
 
 onMounted(load)
-onBeforeUnmount(stopTick)
+onBeforeUnmount(stopTimers)
 </script>
 
 <template>
@@ -119,7 +166,7 @@ onBeforeUnmount(stopTick)
 
         <template v-else-if="payment">
           <div class="pay-head">
-            <span class="pay-kicker">模拟收银台</span>
+            <span class="pay-kicker">{{ isAlipay ? '支付宝收银台' : '模拟收银台' }}</span>
             <h1>
               <small>¥</small>{{ payment.amount.toFixed(2) }}
             </h1>
@@ -134,18 +181,35 @@ onBeforeUnmount(stopTick)
           </div>
 
           <div v-if="isActive" class="pay-body">
-            <n-button
-              type="primary"
-              size="large"
-              block
-              :loading="paying"
-              @click="confirmPay"
-            >
-              模拟支付 ¥{{ payment.amount.toFixed(2) }}
-            </n-button>
-            <p class="pay-hint">
-              这是毕业设计项目的模拟收银台，不会产生真实扣款。
-            </p>
+            <template v-if="isAlipay">
+              <n-button
+                type="primary"
+                size="large"
+                block
+                :loading="paying"
+                @click="checkStatus()"
+              >
+                刷新支付状态
+              </n-button>
+              <p v-if="payLink" class="pay-hint">
+                收银台没有自动打开？<a :href="payLink" target="_blank" rel="noopener">点此前往支付宝</a>
+              </p>
+              <p class="pay-hint">沙箱环境不会产生真实扣款。</p>
+            </template>
+            <template v-else>
+              <n-button
+                type="primary"
+                size="large"
+                block
+                :loading="paying"
+                @click="confirmPay"
+              >
+                模拟支付 ¥{{ payment.amount.toFixed(2) }}
+              </n-button>
+              <p class="pay-hint">
+                这是毕业设计项目的模拟收银台，不会产生真实扣款。
+              </p>
+            </template>
           </div>
 
           <div v-else-if="isPaid" class="pay-body">
@@ -163,14 +227,14 @@ onBeforeUnmount(stopTick)
             </div>
             <div>
               <dt>渠道</dt>
-              <dd>模拟支付</dd>
+              <dd>{{ isAlipay ? '支付宝（沙箱）' : '模拟支付' }}</dd>
             </div>
           </dl>
         </template>
       </main>
 
       <footer class="pay-foot">
-        支付回调会校验二维码凭证；重复通知不会重复入账。
+        支付宝渠道会验签并核对金额；重复通知不会重复入账。
       </footer>
     </div>
   </div>
@@ -293,6 +357,12 @@ onBeforeUnmount(stopTick)
   font-size: 11px;
   line-height: 1.7;
   text-align: center;
+}
+
+.pay-hint a {
+  color: var(--pc-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .pay-done {

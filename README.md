@@ -336,8 +336,16 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 | `SMS_PROVIDER` | 手机验证码发送器，`console` 只写日志；接入短信服务后再扩展 |
 | `VERIFY_CODE_DEBUG` | `true` 时接口直接返回 `debug_code`，仅限本地；部署必须为 `false` |
 | `LOGIN_MAX_FAILURES` / `LOGIN_LOCK_MINUTES` | 连续密码错误锁定阈值，默认 5 次 / 15 分钟 |
+| `PAYMENT_PROVIDER` | `mock`（本地演示）/ `alipay`（支付宝沙箱或正式网关） |
 | `PAYMENT_TTL_MINUTES` | 支付单有效期，默认 15 分钟 |
-| `PAYMENT_MOCK_BASE_URL` | 二维码里写的前端地址，默认 `http://localhost:5173` |
+| `PAYMENT_MOCK_BASE_URL` | 前端地址，模拟支付页与支付宝同步跳转都回到这里 |
+| `PUBLIC_BASE_URL` | 后端公网地址，用于生成支付宝异步通知地址 |
+| `ALIPAY_APP_ID` | 支付宝开放平台应用的 APPID |
+| `ALIPAY_PRIVATE_KEY` | 应用私钥，填 PEM 内容或文件路径（推荐 `secrets/alipay_app_private.pem`） |
+| `ALIPAY_PUBLIC_KEY` | 支付宝公钥，填 PEM 内容或文件路径（推荐 `secrets/alipay_public.pem`） |
+| `ALIPAY_GATEWAY` | 沙箱网关，正式环境改为 `https://openapi.alipay.com/gateway.do` |
+| `ALIPAY_NOTIFY_URL` | 异步通知地址；留空时用 `PUBLIC_BASE_URL` 拼出 |
+| `ALIPAY_SELLER_ID` | 可选，校验通知中的收款账号 |
 | `UPLOAD_DIR` / `MAX_FILE_SIZE_MB` | 图片存放目录与单图上限，默认 `uploads` / 10MB |
 | `SCHEDULER_ENABLED` | 每日 08:00 提醒同步任务；测试环境设为 `false` |
 
@@ -346,10 +354,21 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 数据库只保存 HMAC-SHA256 摘要。本地未配置 SMTP 时，验证码打印到后端日志
 并从接口返回，方便联调；上线前关闭 `VERIFY_CODE_DEBUG` 并填写 SMTP 授权码。
 
-寄养订单支持在线支付，但当前只实现**模拟收银台**：二维码指向本地支付页，
-点「模拟支付」后走与真实渠道相同的回调、幂等和订单状态联动，不产生真实资金。
-微信支付 / 支付宝 / 银行卡收单都需要商户资质，个人账号无法开通；接入真实渠道时
-新增 provider 并补验签、金额比对与对账即可，状态机不用改。
+寄养订单支持在线支付，默认 `PAYMENT_PROVIDER=mock` 使用本地模拟收银台；
+填好支付宝沙箱参数后改为 `alipay`，即走**电脑网站支付**（`alipay.trade.page.pay`）：
+
+- 后端用应用私钥做 RSA2 签名，生成收银台跳转地址；前端点「前往支付宝支付」打开，
+  付款完成后支付宝同步跳回 `/pay/<支付单号>`，页面主动查单。
+- 异步通知 `POST /api/payments/alipay/notify` 会校验签名、`app_id`、可选
+  `seller_id` 和订单金额，核销成功才把订单标记为已支付；重复通知幂等。
+- 异步通知丢失时，「我已完成支付」会调用 `alipay.trade.query` 主动对账，
+  查单响应同样验签。
+- 切到 `alipay` 后模拟回调接口直接返回 403，不能靠本地按钮白拿订单。
+
+支付宝沙箱对个人开放：在 [支付宝开放平台](https://open.alipay.com/) 创建沙箱应用，
+用密钥工具生成应用私钥，把应用公钥上传后复制「支付宝公钥」，两个 PEM 放进
+`backend/secrets/`（已加入 `.gitignore`），再填 `ALIPAY_APP_ID`。本地联调异步
+通知需要内网穿透地址填到 `PUBLIC_BASE_URL`；没有公网回调时仍可用主动查单完成支付。
 
 ## 7. 当前进度
 
@@ -372,7 +391,7 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 - [x] 评测 harness：91 条 YAML 用例、隔离评测库、JSON / CSV 报告
 - [x] Alembic 初始迁移（MySQL）、向量存库 + 应用层余弦检索、订单档期冲突校验
 - [x] Docker Compose 部署验证（ECS 上四容器 healthy；公网访问需在安全组放行 TCP 80）
-- [x] 模拟支付收银台：二维码、扫码页、回调幂等、超时关单、订单支付状态
+- [x] 支付收银台：模拟渠道 + 支付宝沙箱电脑网站支付、RSA2 验签、主动查单、回调幂等
 - [x] 通知中心：站内通知、偏好开关、健康提醒完成 / 延后、每日 08:00 定时补发
 - [x] 图片上传：宠物头像、日报照片（魔数识别、10MB 上限、UUID 文件名）
 - [x] 管理控制台：运营概览、账号启停、笼舍占用、审计日志、只读知识库
@@ -381,7 +400,7 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 - [x] 统一工具注册表：本地 8 个 + 外部 MCP 只读工具（命名空间、注入过滤、故障降级）
 - [x] MCP HTTP 按用户限流 + `mcp_audit_logs` 调用审计 + 管理端查询
 - [x] MCP 专项评测：10 条检查（发现 / 隔离 / 注入 / 超时 / 结果上限 / 降级）
-- [x] 后端 pytest 140 条用例全部通过
+- [x] 后端 pytest 149 条用例全部通过
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
 - [x] LangGraph 对照适配层（`AGENT_ENGINE` / 评测 `--engine`，生产默认显式循环）
 

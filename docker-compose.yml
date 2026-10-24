@@ -61,6 +61,8 @@ services:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend/uploads:/app/uploads
+      # 支付宝私钥/公钥放在宿主机，只读挂进容器；该目录不提交仓库。
+      - ./backend/secrets:/app/secrets:ro
       # 首次检索会下载 BGE 模型；挂载后重建镜像不必重新下载。
       - ./backend/.fastembed_cache:/app/.fastembed_cache
     depends_on:

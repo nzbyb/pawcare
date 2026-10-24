@@ -45,10 +45,25 @@ class Settings(BaseSettings):
     LOGIN_LOCK_MINUTES: int = 15
 
     # ---------- 支付 ----------
-    # 当前只有 mock 渠道：二维码指向本地模拟收银台，不产生真实资金。
+    # mock：本地模拟收银台，不产生真实资金（默认，测试环境）；
+    # alipay：支付宝沙箱 / 正式环境的电脑网站支付。
+    PAYMENT_PROVIDER: str = "mock"
     PAYMENT_TTL_MINUTES: int = 15
-    # 二维码里写的前端地址；换域名时同步修改，否则扫码打不开。
+    # 前端地址：模拟收银台二维码和支付宝同步跳转都会回到这里。
     PAYMENT_MOCK_BASE_URL: str = "http://localhost:5173"
+    # 后端公网地址，用于生成支付宝异步通知地址；本地联调需填内网穿透地址。
+    PUBLIC_BASE_URL: str = "http://localhost:8000"
+
+    # 支付宝开放平台（沙箱与正式环境的网关不同，密钥也各自独立）
+    ALIPAY_APP_ID: str = ""
+    # 可以是 PEM 内容，也可以是文件路径；推荐用路径，避免多行配置。
+    ALIPAY_PRIVATE_KEY: str = ""
+    ALIPAY_PUBLIC_KEY: str = ""
+    ALIPAY_GATEWAY: str = "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
+    # 收银台异步通知 / 同步跳转；留空时按 PUBLIC_BASE_URL 和 PAYMENT_MOCK_BASE_URL 生成。
+    ALIPAY_NOTIFY_URL: str = ""
+    ALIPAY_SELLER_ID: str = ""
+    ALIPAY_QUERY_TIMEOUT_SECONDS: float = 5.0
 
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 

@@ -995,3 +995,66 @@ HTTP 入口有限流和审计；这些边界用一套不依赖大模型的评测
 ### 提交
 
 - `f75266b` feat: 打通 MCP Client、入口限流审计与专项评测
+
+## 2026-10-24 · 第 16 天 · 支付宝沙箱支付接入
+
+### 目标
+
+把毕业设计里的模拟收银台换成真实支付渠道。个人开发者可以申请支付宝沙箱，
+所以选电脑网站支付（`alipay.trade.page.pay`），保留 mock 作为本地演示与测试通道。
+
+### 完成内容
+
+- 配置与模型：
+  - `PAYMENT_PROVIDER` 切换 `mock` / `alipay`；新增 `PUBLIC_BASE_URL` 与
+    `ALIPAY_APP_ID`、`ALIPAY_PRIVATE_KEY`、`ALIPAY_PUBLIC_KEY`、`ALIPAY_GATEWAY`、
+    `ALIPAY_NOTIFY_URL`、`ALIPAY_SELLER_ID`、`ALIPAY_QUERY_TIMEOUT_SECONDS`。
+  - `payment_orders` 新增 `pay_url`（`Text`），迁移 `b7d4f1c8e3a6`；
+    支付宝签名 URL 远超原 `qr_content` 的 255 长度。
+- `app/payments/alipay.py`（不引入官方 SDK，只依赖 cryptography + httpx）：
+  - RSA2（SHA256withRSA）签名与验签；密钥支持 PEM 内容、文件路径、裸 base64，
+    私钥兼容 PKCS8 / PKCS1，公钥兼容 SPKI / PKCS1。
+  - 生成电脑网站支付地址；`timeout_express` 与支付单有效期一致。
+  - 异步通知验签只接受 RSA2，并还原表单解码把 base64 `+` 变成的空格。
+  - 主动查单 `alipay.trade.query`：对响应里的原始 JSON 节点验签（避免重新
+    序列化导致签名不一致），交易不存在返回 `None`。
+- 服务层：
+  - 创建支付单按渠道生成地址；复用未过期支付单时重新签名，避免旧时间戳失效；
+    渠道切换时先关闭旧渠道未支付单。
+  - 统一核销 `_settle_paid`：锁订单、关重复/已取消支付单、更新订单
+    `payment_status` / `paid_amount`、写 `payment.paid` 审计与站内通知。
+  - 支付宝通知：验签 → `app_id` → 可选 `seller_id` → 渠道 → 金额 → 核销；
+    非成功状态只留档；重复通知幂等。
+  - `refresh` 主动查单兜底异步通知丢失；公开支付页的刷新接口按 token 鉴权并限流。
+  - `alipay` 模式下模拟回调直接 403，避免本地按钮白拿订单。
+- API：
+  - `POST /api/payments/alipay/notify` 按支付宝要求返回纯文本 `success` / `failure`。
+  - 新增 `GET /api/payments/public/{payment_no}`、`POST .../refresh`；
+    `/mock/{payment_no}` 保留为兼容别名。
+- 前端：
+  - 收银台按渠道展示：支付宝显示「前往支付宝支付」「我已完成支付」，
+    不再渲染二维码；mock 保持二维码和模拟按钮。
+  - 从支付宝窗口切回时监听 `window focus` 主动查单；公开支付页 5 秒低频轮询
+    并支持手动刷新，展示渠道与沙箱说明。
+- 安全与配置：
+  - `backend/secrets/` 与 `*.pem` 加入 `.gitignore`，只留 `.gitkeep`；
+    Compose 以只读方式挂载 `./backend/secrets:/app/secrets`。
+  - README / architecture / `.env.example` 补沙箱申请与密钥配置说明。
+
+### 验证
+
+- `pytest`：149 passed。新增 9 条支付宝用例：签名地址可验签、通知成功、
+  重复通知幂等、金额篡改拒绝、错误签名 / 换钥签名 / `app_id` 不匹配拒绝、
+  mock 回调关闭、认证查单核销、公开刷新 token 校验、公开响应不含内部字段、
+  复用支付单重新签名。
+- 本地 MySQL 已执行迁移，`alembic heads` 为单一 head `b7d4f1c8e3a6`。
+- `npm run typecheck`、`npm run build` 通过。
+- 尚未用真实沙箱账号走通付款：APPID、应用私钥、支付宝公钥需要申请后填入。
+  本地没有公网地址时异步通知到不了，可用「我已完成支付」的主动查单完成核销。
+
+### 下一步
+
+1. 填入沙箱参数，用沙箱买家账号完成一笔真实回调流水。
+2. ECS 上配置 `PUBLIC_BASE_URL`、上传密钥并重启后端，验证公网通知。
+3. 管理端补支付单列表与退款入口；真实环境对已取消订单的付款应走退款。
+

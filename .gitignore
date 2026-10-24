@@ -13,6 +13,10 @@ htmlcov/
 .env
 .env.*
 !.env.example
+# 支付宝应用私钥、支付宝公钥等支付凭据
+backend/secrets/*
+!backend/secrets/.gitkeep
+*.pem
 
 # Node
 node_modules/

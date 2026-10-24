@@ -10,6 +10,7 @@ export interface Payment {
   amount: number
   status: PaymentStatus
   qr_content: string
+  pay_url?: string | null
   expires_at: string
   owner_id?: number
   paid_at?: string | null
@@ -33,12 +34,29 @@ export function getPayment(
   })
 }
 
-export function getMockPayment(
+export function refreshPayment(paymentNo: string): Promise<Payment> {
+  return request.post<Payment>(
+    `/payments/${encodeURIComponent(paymentNo)}/refresh`,
+  )
+}
+
+export function getPublicPayment(
   paymentNo: string,
   token: string,
 ): Promise<PublicPayment> {
   return request.get<PublicPayment>(
-    `/payments/mock/${encodeURIComponent(paymentNo)}`,
+    `/payments/public/${encodeURIComponent(paymentNo)}`,
+    { params: { token } },
+  )
+}
+
+export function refreshPublicPayment(
+  paymentNo: string,
+  token: string,
+): Promise<PublicPayment> {
+  return request.post<PublicPayment>(
+    `/payments/public/${encodeURIComponent(paymentNo)}/refresh`,
+    undefined,
     { params: { token } },
   )
 }
