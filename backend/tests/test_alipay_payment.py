@@ -42,12 +42,16 @@ def _keypair(tmp_path, name: str):
     }
 
 
-def _sign_text(text: str, private_pem: str) -> str:
+def _sign_bytes(data: bytes, private_pem: str) -> str:
     key = serialization.load_pem_private_key(
         private_pem.encode("utf-8"), password=None
     )
-    signature = key.sign(text.encode("utf-8"), padding.PKCS1v15(), hashes.SHA256())
+    signature = key.sign(data, padding.PKCS1v15(), hashes.SHA256())
     return base64.b64encode(signature).decode("ascii")
+
+
+def _sign_text(text: str, private_pem: str) -> str:
+    return _sign_bytes(text.encode("utf-8"), private_pem)
 
 
 @pytest.fixture()
@@ -278,8 +282,15 @@ def test_raw_base64_key_files_are_supported(tmp_path):
 
 
 class FakeResponse:
-    def __init__(self, text: str):
+    def __init__(
+        self,
+        text: str,
+        content: bytes | None = None,
+        encoding: str = "utf-8",
+    ):
         self.text = text
+        self.content = content if content is not None else text.encode("utf-8")
+        self.encoding = encoding
 
     def raise_for_status(self) -> None:
         return None
@@ -327,6 +338,50 @@ def test_refresh_queries_alipay_and_settles(
         f"/api/boarding/orders/{order['id']}", headers=owner_headers
     ).json()["data"]
     assert detail["payment_status"] == "paid"
+
+
+def test_query_verifies_gbk_response_bytes(
+    client, owner_headers, admin_headers, monkeypatch, alipay_env
+):
+    """沙箱 POST 查单响应是 GBK，签名针对原始字节而不是 UTF-8 重编码。"""
+    order = make_order(client, owner_headers, admin_headers)
+    payment = _payments(client, owner_headers, order["id"])
+
+    node = json.dumps(
+        {
+            "code": "10000",
+            "msg": "Success",
+            "out_trade_no": payment["payment_no"],
+            "trade_no": "2026102422001400000000000003",
+            "trade_status": "TRADE_SUCCESS",
+            "total_amount": f"{payment['amount']:.2f}",
+            "subject": "宠物寄养",
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("gbk")
+    signature = _sign_bytes(node, alipay_env["alipay"]["private_pem"]).encode()
+    body = (
+        b'{"alipay_trade_query_response":'
+        + node
+        + b',"sign":"'
+        + signature
+        + b'"}'
+    )
+
+    monkeypatch.setattr(
+        alipay.httpx,
+        "post",
+        lambda url, data=None, timeout=None: FakeResponse(
+            body.decode("gbk"), body, encoding="gbk"
+        ),
+    )
+
+    result = client.post(
+        f"/api/payments/{payment['payment_no']}/refresh", headers=owner_headers
+    ).json()
+    assert result["code"] == 200, result
+    assert result["data"]["status"] == "paid"
 
 
 def test_public_refresh_requires_token_and_settles(

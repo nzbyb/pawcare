@@ -1103,3 +1103,37 @@ HTTP 入口有限流和审计；这些边界用一套不依赖大模型的评测
 1. 用沙箱买家账号完成一笔真实付款，确认主动查单核销和订单状态。
 2. ECS 配置 `PUBLIC_BASE_URL`、上传密钥，验证公网异步通知。
 
+## 2026-10-24 · 第 16 天（续二）· 部署到 ECS 与 GBK 响应验签
+
+### 部署
+
+- ECS `/opt/pawcare` 从 `e0e6163` 快进到 `fe2b896`。服务器直连 GitHub
+  不稳定，用 `git bundle` 传输提交。
+- 上传 `backend/secrets/` 两个密钥文件（权限 600），`.env` 追加：
+  `PAYMENT_PROVIDER=alipay`、`PUBLIC_BASE_URL=http://121.196.150.159`、
+  沙箱 APPID / 网关，私钥与公钥使用容器内相对路径 `secrets/*.pem`。
+- 重建 backend 与 frontend；容器入口自动执行迁移 `b7d4f1c8e3a6`。
+
+### 发现的问题
+
+- 部署后容器内查单报「支付宝响应验签失败」。对比响应原始字节后确认：
+  沙箱对 **POST** `alipay.trade.query` 返回的 JSON 是 GBK 编码，签名按
+  GBK 字节计算；原实现按 UTF-8 解码后再重新编码，字节不同导致验签失败。
+  本地之前用 GET 查单（响应为 UTF-8），所以没有暴露。
+- 修复：`_extract_node` 改为在原始字节上截取业务节点；`_verify_response`
+  接收 `response.content`，仅用响应声明的 charset 解析 JSON，验签始终
+  针对原始字节。
+- 新增回归用例：带中文的 GBK 响应也能验签并核销。
+
+### 验证
+
+- `pytest`：151 passed。
+- ECS 容器内实测 `alipay.trade.query` 返回 `ACQ.TRADE_NOT_EXIST`，
+  说明请求签名与响应验签都已通过。
+- 后端健康检查通过、迁移执行完成，前端已重建。
+
+### 下一步
+
+1. 用沙箱买家账号在公网站点完成一笔付款，确认回调 / 主动查单核销。
+2. 观察 ECS 到支付宝网关的网络稳定性与异步通知可达性。
+

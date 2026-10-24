@@ -222,52 +222,56 @@ def verify_notify(form: dict[str, Any], public_key: str) -> bool:
     return _verify_text(notify_content(form), sign, public_key)
 
 
-def _extract_node(text: str, key: str) -> str:
-    """从响应原文里截出某个对象的原始 JSON，用于验签。
+def _extract_node(content: bytes, key: str) -> bytes:
+    """从响应原始字节里截出业务节点的 JSON，用于验签。
 
-    支付宝响应签名针对的是响应节点的原始字符串，重新 json.dumps
-    可能因空格或转义不同而验签失败。
+    支付宝响应签名针对的是响应节点的原始字节；重新 json.dumps、
+    或按 UTF-8 重新编码都会改变字节（沙箱的 POST 查单响应是 GBK）。
     """
-    marker = f'"{key}"'
-    index = text.find(marker)
+    marker = f'"{key}"'.encode("utf-8")
+    index = content.find(marker)
     if index < 0:
-        return ""
-    colon = text.find(":", index + len(marker))
+        return b""
+    colon = content.find(b":", index + len(marker))
     if colon < 0:
-        return ""
+        return b""
     start = colon + 1
-    while start < len(text) and text[start] in " \t\r\n":
+    while start < len(content) and content[start] in b" \t\r\n":
         start += 1
-    if start >= len(text) or text[start] != "{":
-        return ""
+    if start >= len(content) or content[start : start + 1] != b"{":
+        return b""
 
     depth = 0
     in_string = False
     escaped = False
-    for position in range(start, len(text)):
-        char = text[position]
+    for position in range(start, len(content)):
+        char = content[position]
         if in_string:
             if escaped:
                 escaped = False
-            elif char == "\\":
+            elif char == 0x5C:  # 反斜杠
                 escaped = True
-            elif char == '"':
+            elif char == 0x22:  # 双引号
                 in_string = False
             continue
-        if char == '"':
+        if char == 0x22:
             in_string = True
-        elif char == "{":
+        elif char == 0x7B:  # {
             depth += 1
-        elif char == "}":
+        elif char == 0x7D:  # }
             depth -= 1
             if depth == 0:
-                return text[start : position + 1]
-    return ""
+                return content[start : position + 1]
+    return b""
 
 
-def _verify_response(text: str, node_key: str, public_key: str) -> dict[str, Any]:
+def _verify_response(
+    content: bytes, node_key: str, public_key: str, charset: str = "utf-8"
+) -> dict[str, Any]:
     try:
-        payload = json.loads(text)
+        payload = json.loads(content.decode(charset))
+    except (UnicodeDecodeError, LookupError) as exc:
+        raise AlipayError("支付宝响应编码不合法") from exc
     except json.JSONDecodeError as exc:
         raise AlipayError("支付宝响应不是合法 JSON") from exc
 
@@ -276,7 +280,7 @@ def _verify_response(text: str, node_key: str, public_key: str) -> dict[str, Any
         raise AlipayError("支付宝响应缺少业务节点")
 
     signature = payload.get("sign")
-    raw_node = _extract_node(text, node_key)
+    raw_node = _extract_node(content, node_key)
     if not signature or not raw_node:
         raise AlipayError("支付宝响应缺少签名")
     try:
@@ -287,7 +291,7 @@ def _verify_response(text: str, node_key: str, public_key: str) -> dict[str, Any
     try:
         key.verify(
             decoded,
-            raw_node.encode("utf-8"),
+            raw_node,
             padding.PKCS1v15(),
             hashes.SHA256(),
         )
@@ -318,7 +322,12 @@ def query_trade(
     except httpx.HTTPError as exc:
         raise AlipayError(f"支付宝查单失败：{exc}") from exc
 
-    node = _verify_response(response.text, "alipay_trade_query_response", public_key)
+    node = _verify_response(
+        response.content,
+        "alipay_trade_query_response",
+        public_key,
+        getattr(response, "encoding", None) or "utf-8",
+    )
     code = str(node.get("code", ""))
     if code == "10000":
         return node
