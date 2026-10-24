@@ -369,6 +369,7 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 用密钥工具生成应用私钥，把应用公钥上传后复制「支付宝公钥」，两个 PEM 放进
 `backend/secrets/`（已加入 `.gitignore`），再填 `ALIPAY_APP_ID`。本地联调异步
 通知需要内网穿透地址填到 `PUBLIC_BASE_URL`；没有公网回调时仍可用主动查单完成支付。
+完整步骤见 [docs/alipay-sandbox.md](docs/alipay-sandbox.md)。
 
 ## 7. 当前进度
 
