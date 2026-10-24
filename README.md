@@ -16,7 +16,7 @@
 | 数据库 | MySQL 8+（PyMySQL）+ Alembic |
 | 缓存/限流 | Redis 7（可选，未启动时退回进程内存） |
 | 鉴权 | JWT + bcrypt，三角色：宠物主 / 寄养员 / 管理员 |
-| Agent | 显式工具调用循环 + 步骤级 SSE（httpx + OpenAI 兼容接口）；附 LangGraph 对照适配层 |
+| Agent | 显式工具调用循环 + 步骤/逐字 SSE（httpx + OpenAI 兼容接口）；附 LangGraph 对照适配层 |
 | 能力开放 | MCP 1.30：只读 Server（stdio / Streamable HTTP）+ 站内 Agent 的只读 MCP Client |
 | RAG | fastembed + bge-small-zh-v1.5（512 维），向量以 JSON 文本存库，应用层余弦 + 词法混合检索 |
 | 定时 | APScheduler（单进程） |
@@ -387,7 +387,7 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 - [x] 多轮工具调用循环、会话历史持久化、token / 耗时 / 错误码 trace
 - [x] `POST /api/agent/chat` 与历史会话接口，deepseek-flash 真实冒烟通过
 - [x] 前端智能助手页：多轮对话、工具轨迹、草稿卡片、历史会话切换
-- [x] SSE 流式输出：步骤事件 + 前端增量渲染
+- [x] SSE 流式输出：步骤事件 + 正文逐字增量 + 前端增量渲染
 - [x] RAG：14 篇护理知识、混合检索、来源标注、拒答与注入防护
 - [x] 评测 harness：91 条 YAML 用例、隔离评测库、JSON / CSV 报告
 - [x] Alembic 初始迁移（MySQL）、向量存库 + 应用层余弦检索、订单档期冲突校验
@@ -401,7 +401,7 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 - [x] 统一工具注册表：本地 8 个 + 外部 MCP 只读工具（命名空间、注入过滤、故障降级）
 - [x] MCP HTTP 按用户限流 + `mcp_audit_logs` 调用审计 + 管理端查询
 - [x] MCP 专项评测：10 条检查（发现 / 隔离 / 注入 / 超时 / 结果上限 / 降级）
-- [x] 后端 pytest 151 条用例全部通过
+- [x] 后端 pytest 152 条用例全部通过
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
 - [x] LangGraph 对照适配层（`AGENT_ENGINE` / 评测 `--engine`，生产默认显式循环）
 

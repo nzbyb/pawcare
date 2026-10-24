@@ -100,11 +100,14 @@ POST /api/boarding/drafts/{id}/confirm
 | `start` | 用户消息落库后 | `conversation_id`、`trace_id` |
 | `llm_start` / `llm_end` | 每轮模型调用前后 | 轮次、耗时、是否产生工具调用 |
 | `tool_start` / `tool_end` | 每个工具执行前后 | 工具名、参数、状态、摘要、耗时 |
-| `assistant` | 最终回复落库后 | 完整回复文本 |
+| `delta` | 最终回答生成过程中 | 一小段正文增量，前端累加渲染 |
+| `assistant` | 最终回复落库后 | 完整回复文本（以它为准覆盖增量） |
 | `done` | 本轮结束 | 与 `/agent/chat` 相同的完整响应 |
 | `error` | 流内异常 | 友好错误文案 |
 
 - 校验、会话归属和模型配置检查在返回流之前完成，失败仍是普通 JSON 错误。
+- 模型调用开启 `stream: true`，正文增量通过 `delta` 实时下发；工具调用的
+  分片参数在流结束时拼装。客户端不支持流式时自动退回一次性 `complete`。
 - 流式与非流式共用 `prepare_turn` / `run_agent` / `finalize_turn`，持久化和 trace 行为一致。
 - 客户端断开时取消后台 Agent 任务；已落库的消息保留，未完成轮次不产生最终回复。
 - 非流式 `/agent/chat` 保留，供评测和脚本调用。

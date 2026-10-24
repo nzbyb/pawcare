@@ -268,6 +268,10 @@ async function runTurn(content: string): Promise<void> {
             latency_ms:
               typeof data.latency_ms === 'number' ? data.latency_ms : null,
           })
+        } else if (event === 'delta') {
+          const target = ensureBubble()
+          target.content += String(data.content ?? '')
+          void scrollToBottom()
         } else if (event === 'assistant') {
           ensureBubble().content = String(data.content ?? '')
           void scrollToBottom()

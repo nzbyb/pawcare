@@ -27,6 +27,21 @@ class FakeLLM:
         return item
 
 
+class FakeStreamingLLM(FakeLLM):
+    """逐段回调正文的假模型，用来测试 delta 事件。"""
+
+    def __init__(self, chunks, response=None):
+        super().__init__([])
+        self.chunks = chunks
+        self.response = response
+
+    async def stream_complete(self, messages, tools, on_delta):
+        self.calls.append(messages)
+        for chunk in self.chunks:
+            await on_delta(chunk)
+        return self.response or LLMResponse(content="".join(self.chunks))
+
+
 def create_kennel(client, admin_headers):
     body = client.post(
         "/api/kennels",
@@ -367,6 +382,22 @@ def test_chat_stream_emits_steps(client, owner_headers, monkeypatch):
     assert done["trace_id"] == start["trace_id"]
     assert done["tool_events"][0]["name"] == "list_my_pets"
     assert done["draft"] is None
+
+
+def test_chat_stream_emits_delta_events(client, owner_headers, monkeypatch):
+    """正文应该逐段到达，而不是等 done 时整段出现。"""
+    llm = FakeStreamingLLM(["你", "好", "，我是助手"])
+
+    events = stream_chat(client, owner_headers, monkeypatch, llm, "你好")
+    names = [name for name, _ in events]
+    deltas = [data["content"] for name, data in events if name == "delta"]
+    assert deltas == ["你", "好", "，我是助手"]
+    assert "".join(deltas) == "你好，我是助手"
+
+    assistant = next(data for name, data in events if name == "assistant")
+    assert assistant["content"] == "你好，我是助手"
+    assert events[-1][0] == "done"
+    assert events[-1][1]["content"] == "你好，我是助手"
 
 
 def test_chat_stream_validates_before_streaming(client, owner_headers):

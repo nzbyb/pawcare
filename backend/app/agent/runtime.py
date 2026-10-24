@@ -72,6 +72,14 @@ class LLMClient(Protocol):
         ...
 
 
+def _tool_arguments(raw: str) -> dict:
+    try:
+        value = json.loads(raw or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {"__invalid_arguments__": str(raw)[:500]}
+    return value if isinstance(value, dict) else {}
+
+
 class OpenAICompatibleClient:
     def __init__(self) -> None:
         self.base_url = settings.LLM_BASE_URL.rstrip("/")
@@ -117,22 +125,112 @@ class OpenAICompatibleClient:
         tool_calls: list[ToolCall] = []
         for item in message.get("tool_calls") or []:
             function = item.get("function") or {}
-            raw_args = function.get("arguments") or "{}"
-            try:
-                arguments = json.loads(raw_args)
-            except (TypeError, json.JSONDecodeError):
-                arguments = {"__invalid_arguments__": str(raw_args)[:500]}
             tool_calls.append(
                 ToolCall(
                     id=item.get("id") or uuid4().hex,
                     name=function.get("name") or "",
-                    arguments=arguments if isinstance(arguments, dict) else {},
+                    arguments=_tool_arguments(function.get("arguments") or "{}"),
                 )
             )
 
         usage = data.get("usage") or {}
         return LLMResponse(
             content=message.get("content"),
+            tool_calls=tool_calls,
+            token_in=int(usage.get("prompt_tokens") or 0),
+            token_out=int(usage.get("completion_tokens") or 0),
+        )
+
+    async def stream_complete(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        on_delta: Callable[[str], Awaitable[None]],
+    ) -> LLMResponse:
+        """流式调用：正文增量实时回调，工具调用分片在结束时拼装。"""
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.2,
+            "max_tokens": settings.LLM_MAX_TOKENS,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+
+        timeout = httpx.Timeout(settings.AGENT_TIMEOUT_SECONDS, connect=10.0)
+        content_parts: list[str] = []
+        call_parts: dict[int, dict[str, str]] = {}
+        usage: dict = {}
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            ) as response:
+                if response.status_code >= 400:
+                    body = (await response.aread()).decode("utf-8", "replace")
+                    logger.error(
+                        "LLM 流式调用失败: HTTP %s %s",
+                        response.status_code,
+                        body[:500],
+                    )
+                    raise LLMError("模型服务返回错误")
+
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if chunk.get("usage"):
+                        usage = chunk["usage"]
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta") or {}
+
+                    text = delta.get("content")
+                    if text:
+                        content_parts.append(text)
+                        await on_delta(text)
+
+                    for fragment in delta.get("tool_calls") or []:
+                        index = int(fragment.get("index") or 0)
+                        entry = call_parts.setdefault(
+                            index, {"id": "", "name": "", "arguments": ""}
+                        )
+                        if fragment.get("id"):
+                            entry["id"] = fragment["id"]
+                        function = fragment.get("function") or {}
+                        if function.get("name"):
+                            entry["name"] = function["name"]
+                        if function.get("arguments"):
+                            entry["arguments"] += function["arguments"]
+
+        tool_calls = [
+            ToolCall(
+                id=entry["id"] or uuid4().hex,
+                name=entry["name"],
+                arguments=_tool_arguments(entry["arguments"]),
+            )
+            for _, entry in sorted(call_parts.items())
+        ]
+        return LLMResponse(
+            content="".join(content_parts) or None,
             tool_calls=tool_calls,
             token_in=int(usage.get("prompt_tokens") or 0),
             token_out=int(usage.get("completion_tokens") or 0),
@@ -293,14 +391,25 @@ async def run_agent(
             draft_id=draft_id,
         )
 
+    async def push_delta(text: str) -> None:
+        await _emit(on_event, "delta", {"content": text})
+
     for step in range(max_tool_rounds + 1):
         started = time.perf_counter()
         await _emit(on_event, "llm_start", {"round": step + 1})
         try:
-            response = await asyncio.wait_for(
-                llm.complete(messages, tool_definitions),
-                timeout=settings.AGENT_TIMEOUT_SECONDS + 5,
-            )
+            # 有流式需求且客户端支持时逐字推送；否则退回一次性调用。
+            stream = getattr(llm, "stream_complete", None)
+            if on_event is not None and stream is not None:
+                response = await asyncio.wait_for(
+                    stream(messages, tool_definitions, push_delta),
+                    timeout=settings.AGENT_TIMEOUT_SECONDS + 5,
+                )
+            else:
+                response = await asyncio.wait_for(
+                    llm.complete(messages, tool_definitions),
+                    timeout=settings.AGENT_TIMEOUT_SECONDS + 5,
+                )
         except asyncio.TimeoutError:
             return await finish(_friendly_failure("timeout"))
         except Exception:
