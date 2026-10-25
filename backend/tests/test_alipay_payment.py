@@ -2,6 +2,7 @@
 
 import base64
 import json
+from datetime import datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -338,6 +339,73 @@ def test_refresh_queries_alipay_and_settles(
         f"/api/boarding/orders/{order['id']}", headers=owner_headers
     ).json()["data"]
     assert detail["payment_status"] == "paid"
+
+
+def test_refresh_settles_payment_closed_by_expiry(
+    client, owner_headers, admin_headers, db, monkeypatch, alipay_env
+):
+    """支付单过期关单后用户才付完款，主动查单仍要能核销。"""
+    order = make_order(client, owner_headers, admin_headers)
+    payment = _payments(client, owner_headers, order["id"])
+    row = (
+        db.query(PaymentOrder)
+        .filter(PaymentOrder.payment_no == payment["payment_no"])
+        .one()
+    )
+    row.status = "closed"
+    row.expires_at = datetime.now() - timedelta(minutes=1)
+    db.commit()
+
+    monkeypatch.setattr(
+        alipay.httpx,
+        "post",
+        lambda url, data=None, timeout=None: _query_response(
+            payment["payment_no"],
+            payment["amount"],
+            alipay_env["alipay"]["private_pem"],
+        ),
+    )
+
+    body = client.post(
+        f"/api/payments/{payment['payment_no']}/refresh", headers=owner_headers
+    ).json()
+    assert body["code"] == 200, body
+    assert body["data"]["status"] == "paid"
+
+    detail = client.get(
+        f"/api/boarding/orders/{order['id']}", headers=owner_headers
+    ).json()["data"]
+    assert detail["payment_status"] == "paid"
+
+
+def test_refresh_skips_long_closed_payment(
+    client, owner_headers, admin_headers, db, monkeypatch, alipay_env
+):
+    """过期超过一天的关单不再查，避免每次回到页面都打网关。"""
+    order = make_order(client, owner_headers, admin_headers)
+    payment = _payments(client, owner_headers, order["id"])
+    row = (
+        db.query(PaymentOrder)
+        .filter(PaymentOrder.payment_no == payment["payment_no"])
+        .one()
+    )
+    row.status = "closed"
+    row.expires_at = datetime.now() - timedelta(hours=25)
+    db.commit()
+
+    calls: list[int] = []
+
+    def fake_post(*args, **kwargs):
+        calls.append(1)
+        raise AssertionError("不应发起查单")
+
+    monkeypatch.setattr(alipay.httpx, "post", fake_post)
+    body = client.post(
+        f"/api/payments/{payment['payment_no']}/refresh", headers=owner_headers
+    ).json()
+    assert body["code"] == 200, body
+    assert body["data"]["status"] == "closed"
+    assert calls == []
 
 
 def test_query_verifies_gbk_response_bytes(

@@ -30,6 +30,19 @@ logger = logging.getLogger(__name__)
 PAYABLE_ORDER_STATUSES = ("pending", "confirmed")
 ACTIVE_PAYMENT_STATUSES = ("created", "paying")
 PROVIDERS = ("mock", "alipay")
+# 支付单过期关单后仍允许查单的窗口：用户可能刚好在到期后付完款，
+# 而公网异步通知又没送达，只能靠主动查单把钱和订单对上。
+CLOSED_QUERY_WINDOW = timedelta(hours=24)
+
+
+def _queryable(payment: PaymentOrder, now: datetime) -> bool:
+    """主动查单只对「还可能收到钱」的支付单发起，避免无谓的网关请求。"""
+    if payment.status in ACTIVE_PAYMENT_STATUSES:
+        return True
+    return (
+        payment.status == "closed"
+        and payment.expires_at > now - CLOSED_QUERY_WINDOW
+    )
 
 
 def _audit(
@@ -473,8 +486,12 @@ def handle_alipay_notify(db: Session, form: dict) -> None:
 
 
 def refresh_payment(db: Session, payment: PaymentOrder) -> PaymentOrder:
-    """主动向支付宝查单；异步通知丢失时作为兜底。"""
-    if payment.channel != "alipay" or payment.status not in ACTIVE_PAYMENT_STATUSES:
+    """主动向支付宝查单；异步通知丢失时作为兜底。
+
+    支付单可能刚过期就被关单，而用户其实已经付款；关单 24 小时内仍去查，
+    查到 `TRADE_SUCCESS` 就按正常核销，避免「钱付了、单没核销」。
+    """
+    if payment.channel != "alipay" or not _queryable(payment, _now()):
         return payment
 
     app_id, private_key, public_key, gateway = _alipay_config()
