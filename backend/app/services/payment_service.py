@@ -206,6 +206,8 @@ def create_payment(db: Session, user: User, order_id: int) -> PaymentOrder:
     channel = _provider()
 
     # 同一订单未过期的支付单直接复用，避免用户连点生成多张码。
+    # 订单行已在 _check_payable 里锁住，这里再用锁读：并发请求排队拿到锁后
+    # 读到的是前一个请求刚提交的支付单，而不是事务开始时的旧快照。
     existing = (
         db.query(PaymentOrder)
         .filter(
@@ -214,6 +216,8 @@ def create_payment(db: Session, user: User, order_id: int) -> PaymentOrder:
             PaymentOrder.expires_at > now,
         )
         .order_by(PaymentOrder.id.desc())
+        .populate_existing()
+        .with_for_update()
         .first()
     )
     if existing and existing.channel != channel:
