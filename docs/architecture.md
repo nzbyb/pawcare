@@ -68,12 +68,13 @@ POST /api/boarding/drafts/{id}/confirm
 
 **Agent 没有 confirm 工具。** 这是本项目的核心安全边界。
 
-## 4. 工具清单（8 个）
+## 4. 工具清单（9 个）
 
 | 工具 | 类型 | 权限 | 说明 |
 |---|---|---|---|
 | `list_my_pets` | 读 | 宠物主本人 / 寄养员与管理员只读全部 | 当前用户可访问的宠物 |
 | `get_pet_health_records` | 读 | 宠物主本人 / 寄养员与管理员只读 | 按宠物名、类型、日期查健康记录 |
+| `get_boarding_health_check` | 读 | 宠物主本人 / 寄养员与管理员 | 指定寄养日期的健康资料核对，不代表诊断或入住许可 |
 | `get_upcoming_reminders` | 读 | 宠物主本人 / 寄养员与管理员只读 | 待处理提醒 |
 | `check_kennel_availability` | 读 | 登录用户 | 日期 + 体型查空闲笼舍与预估价格 |
 | `create_boarding_draft` | 写草稿 | 宠物主本人 | 只建草稿，15 分钟过期 |
@@ -288,7 +289,7 @@ Claude Desktop / Cursor ──stdio──┐
 合并成同一份 function schema：
 
 ```text
-                    ┌─ 本地 8 个工具（TOOL_DEFINITIONS / execute_tool）
+                    ┌─ 本地 9 个工具（TOOL_DEFINITIONS / execute_tool）
 Agent runtime ──────┤
                     └─ 外部 MCP 只读工具（mcp__server__tool）
                             ↑ ToolRegistry 发现 + 缓存

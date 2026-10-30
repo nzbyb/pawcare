@@ -32,6 +32,7 @@ import {
 } from '@/api/health'
 import { addWeight, getPet, listWeights } from '@/api/pets'
 import PetFormModal from '@/components/PetFormModal.vue'
+import { useAuthStore } from '@/stores/auth'
 import type {
   HealthRecord,
   HealthRecordType,
@@ -54,6 +55,8 @@ echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
+const canEdit = computed(() => auth.user?.role === 'pet_owner' || auth.user?.role === 'admin')
 const message = useMessage()
 const dialog = useDialog()
 
@@ -419,7 +422,7 @@ onBeforeUnmount(() => {
                 {{ nextReminder ? dueLabel(nextReminder.due_date) : '暂无' }}
               </strong>
             </div>
-            <n-button size="small" @click="showEdit = true">编辑档案</n-button>
+            <n-button v-if="canEdit" size="small" @click="showEdit = true">编辑档案</n-button>
           </div>
         </section>
 
@@ -438,7 +441,7 @@ onBeforeUnmount(() => {
             <n-tab-pane name="weight" tab="体重趋势">
               <div class="tab-toolbar">
                 <span class="muted">记录体重变化，观察长期趋势</span>
-                <n-button size="small" type="primary" @click="openWeightModal">
+                <n-button v-if="canEdit" size="small" type="primary" @click="openWeightModal">
                   + 记录体重
                 </n-button>
               </div>
@@ -454,7 +457,7 @@ onBeforeUnmount(() => {
             <n-tab-pane name="health" tab="健康档案">
               <div class="tab-toolbar">
                 <span class="muted">疫苗、驱虫、用药和就诊记录</span>
-                <n-button size="small" type="primary" @click="openHealthModal">
+                <n-button v-if="canEdit" size="small" type="primary" @click="openHealthModal">
                   + 新增记录
                 </n-button>
               </div>
@@ -476,6 +479,7 @@ onBeforeUnmount(() => {
                       <strong>{{ record.title }}</strong>
                     </div>
                     <n-button
+                      v-if="canEdit"
                       text
                       type="error"
                       size="small"
@@ -525,7 +529,7 @@ onBeforeUnmount(() => {
                   >
                     {{ dueLabel(reminder.due_date) }}
                   </span>
-                  <span class="reminder-actions">
+                  <span v-if="canEdit" class="reminder-actions">
                     <n-button
                       size="tiny"
                       secondary

@@ -1,5 +1,7 @@
 import { request } from './http'
 import type {
+  BoardingHealthCheck,
+  BoardingTasks,
   BoardingDraft,
   BoardingDraftPayload,
   BoardingOrder,
@@ -8,6 +10,18 @@ import type {
   Kennel,
   KennelSize,
 } from '@/types'
+
+export function getBoardingHealthCheck(params: {
+  pet_id: number
+  start_date: string
+  end_date: string
+}): Promise<BoardingHealthCheck> {
+  return request.get<BoardingHealthCheck>('/boarding/health-check', { params })
+}
+
+export function getBoardingTasks(): Promise<BoardingTasks> {
+  return request.get<BoardingTasks>('/boarding/tasks/today')
+}
 
 export function listKennels(): Promise<Kennel[]> {
   return request.get<Kennel[]>('/kennels')

@@ -4,7 +4,7 @@
 Agent 只能生成 pending 草稿；订单必须由用户在独立的 REST 接口里确认。
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -25,12 +25,13 @@ from app.models.user import User
 from app.schemas.boarding import (
     BoardingDraftCreate,
     BoardingDraftResponse,
+    BoardingHealthCheck,
     BoardingOrderResponse,
     DailyReportCreate,
     KennelCreate,
     KennelUpdate,
 )
-from app.services import notification_service
+from app.services import boarding_health_service, notification_service
 
 # pending 的订单也占用档期，避免两个用户同时确认后撞车
 ACTIVE_ORDER_STATUSES = ("pending", "confirmed", "checked_in", "boarding")
@@ -65,6 +66,8 @@ def _pet_name(db: Session, pet_id: int) -> str:
 
 
 def _validate_period(start_date, end_date) -> int:
+    if start_date < date.today():
+        raise BusinessException(message="入住日期不能早于今天")
     if end_date <= start_date:
         raise BusinessException(message="退房日期必须晚于入住日期")
     nights = (end_date - start_date).days
@@ -79,6 +82,7 @@ def _has_overlap(
     start_date,
     end_date,
     exclude_order_id: int | None = None,
+    lock: bool = False,
 ) -> bool:
     """半开区间 [start, end) 的重叠判断。"""
     query = db.query(BoardingOrder.id).filter(
@@ -89,6 +93,20 @@ def _has_overlap(
     )
     if exclude_order_id is not None:
         query = query.filter(BoardingOrder.id != exclude_order_id)
+    if lock:
+        query = query.with_for_update()
+    return query.first() is not None
+
+
+def _pet_has_overlap(db: Session, pet_id: int, start_date, end_date, *, lock: bool = False) -> bool:
+    query = db.query(BoardingOrder.id).filter(
+        BoardingOrder.pet_id == pet_id,
+        BoardingOrder.status.in_(ACTIVE_ORDER_STATUSES),
+        BoardingOrder.start_date < end_date,
+        BoardingOrder.end_date > start_date,
+    )
+    if lock:
+        query = query.with_for_update()
     return query.first() is not None
 
 
@@ -212,6 +230,8 @@ def create_draft(db: Session, user: User, data: BoardingDraftCreate) -> Boarding
 
     if _has_overlap(db, kennel.id, data.start_date, data.end_date):
         raise BusinessException(message="该笼舍在所选日期已被预订", code=409)
+    if _pet_has_overlap(db, pet.id, data.start_date, data.end_date):
+        raise BusinessException(message="该宠物在所选日期已有寄养预约", code=409)
 
     daily_price = float(kennel.daily_price)
     total_amount = round(daily_price * nights, 2)
@@ -334,10 +354,15 @@ def confirm_draft(
         db.commit()
         raise BusinessException(message="草稿已过期，请重新生成", code=409)
 
-    # 锁住笼舍行，把同一笼舍的确认请求串行化（MySQL 行锁 + 写事务）；
+    _validate_period(draft.start_date, draft.end_date)
+    # 先锁宠物再锁笼舍：不同笼舍的并发确认也不能给同一宠物重复预约。
+    pet = db.query(Pet).filter(Pet.id == draft.pet_id).populate_existing().with_for_update().first()
+    if not pet or pet.status == "deleted" or pet.owner_id != user.id:
+        raise BusinessException(message="宠物档案已失效，请重新生成预约", code=409)
     kennel = (
         db.query(Kennel)
         .filter(Kennel.id == draft.kennel_id)
+        .populate_existing()
         .with_for_update()
         .first()
     )
@@ -345,9 +370,11 @@ def confirm_draft(
         raise BusinessException(message="笼舍不存在")
     if kennel.status == "maintenance":
         raise BusinessException(message="该笼舍正在维护", code=409)
-    if _has_overlap(db, kennel.id, draft.start_date, draft.end_date):
+    if _has_overlap(db, kennel.id, draft.start_date, draft.end_date, lock=True):
         db.rollback()
         raise BusinessException(message="笼舍刚刚被预订，请重新选择", code=409)
+    if _pet_has_overlap(db, pet.id, draft.start_date, draft.end_date, lock=True):
+        raise BusinessException(message="该宠物在所选日期已有寄养预约", code=409)
 
     nights = (draft.end_date - draft.start_date).days
     order = BoardingOrder(
@@ -495,11 +522,21 @@ def check_in(db: Session, user: User, order_id: int) -> BoardingOrder:
     if order.status != "confirmed":
         raise BusinessException(message="只有已确认的订单可以入住", code=409)
 
-    kennel = db.query(Kennel).filter(Kennel.id == order.kennel_id).with_for_update().first()
+    if order.payment_status != "paid" or order.paid_amount < order.total_amount:
+        raise BusinessException(message="订单需全额支付后才能办理入住", code=409)
+    if not order.start_date <= date.today() < order.end_date:
+        raise BusinessException(message="只能在预约期间办理入住，退房当天及之后不能入住", code=409)
+    pet = db.query(Pet).filter(Pet.id == order.pet_id).populate_existing().with_for_update().first()
+    if not pet or pet.status == "deleted":
+        raise BusinessException(message="宠物档案已失效，不能办理入住", code=409)
+
+    kennel = db.query(Kennel).filter(Kennel.id == order.kennel_id).populate_existing().with_for_update().first()
     if not kennel:
         raise BusinessException(message="笼舍不存在")
     if kennel.status == "maintenance":
         raise BusinessException(message="该笼舍正在维护", code=409)
+    if kennel.status == "cleaning":
+        raise BusinessException(message="该笼舍正在清洁，请完成清洁后再入住", code=409)
 
     occupied = (
         db.query(BoardingOrder)
@@ -508,7 +545,7 @@ def check_in(db: Session, user: User, order_id: int) -> BoardingOrder:
             BoardingOrder.id != order.id,
             BoardingOrder.status.in_(("checked_in", "boarding")),
         )
-        .first()
+        .with_for_update().first()
     )
     if occupied:
         raise BusinessException(message="该笼舍已有宠物入住", code=409)
@@ -520,7 +557,7 @@ def check_in(db: Session, user: User, order_id: int) -> BoardingOrder:
             BoardingOrder.id != order.id,
             BoardingOrder.status.in_(("checked_in", "boarding")),
         )
-        .first()
+        .with_for_update().first()
     )
     if boarding_elsewhere:
         raise BusinessException(message="该宠物已在其他寄养订单中入住", code=409)
@@ -695,6 +732,11 @@ def draft_payload(db: Session, draft: BoardingDraft) -> dict:
     payload.pet_name = pet.name if pet else None
     payload.kennel_code = kennel.code if kennel else None
     payload.nights = (draft.end_date - draft.start_date).days
+    if pet and pet.status != "deleted":
+        owner = db.get(User, draft.owner_id)
+        payload.health_check = BoardingHealthCheck.model_validate(boarding_health_service.check_health(
+            db, owner, pet.id, draft.start_date, draft.end_date
+        ))
     return payload.model_dump()
 
 

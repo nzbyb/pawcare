@@ -121,7 +121,7 @@ def test_order_events_notify_owner_and_staff(
     pet = create_pet(client, owner_headers).json()["data"]
     kennel = create_kennel(client, admin_headers)
     draft = create_draft(
-        client, owner_headers, pet["id"], kennel["id"], day(20), day(22)
+        client, owner_headers, pet["id"], kennel["id"], day(0), day(2)
     ).json()["data"]
 
     order = client.post(
@@ -144,6 +144,8 @@ def test_order_events_notify_owner_and_staff(
     owner_items = list_notifications(client, owner_headers)["items"]
     assert owner_items[0]["title"] == "寄养订单已确认"
 
+    from tests.test_boarding import pay_order
+    pay_order(client, owner_headers, order["id"])
     resp = client.post(
         f"/api/boarding/orders/{order['id']}/check-in", headers=staff_headers
     )

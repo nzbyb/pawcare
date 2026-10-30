@@ -21,7 +21,7 @@ from app.models.reminder import Reminder
 from app.models.user import User
 from app.rag.retriever import KNOWLEDGE_CATEGORIES, search
 from app.schemas.boarding import BoardingDraftCreate
-from app.services import boarding_service
+from app.services import boarding_health_service, boarding_service
 
 logger = logging.getLogger(__name__)
 
@@ -229,8 +229,16 @@ def _tool_create_boarding_draft(
         "nights": nights,
         "daily_price": float(draft.daily_price),
         "total_amount": float(draft.total_amount),
+        "health_check": boarding_health_service.check_health(db, user, pet.id, start, end),
         "next_step": "草稿已生成。请让用户在前端确认；你不能确认订单。",
     }
+
+
+def _tool_get_boarding_health_check(db: Session, user: User, args: dict, ctx: ToolContext) -> dict:
+    pet = _resolve_pet(db, user, args.get("pet_name", ""))
+    start = _parse_date(args.get("start_date"), "start_date")
+    end = _parse_date(args.get("end_date"), "end_date")
+    return boarding_health_service.check_health(db, user, pet.id, start, end)
 
 
 def _tool_list_boarding_orders(
@@ -314,6 +322,22 @@ def _tool_search_care_knowledge(
 
 
 TOOL_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_boarding_health_check",
+            "description": "按宠物名字和寄养日期核对疫苗、驱虫到期日、过敏信息及近期症状。只返回资料核对结果，不代表医学诊断或入住许可。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pet_name": {"type": "string", "description": "宠物名字"},
+                    "start_date": {"type": "string", "description": "入住日期 YYYY-MM-DD"},
+                    "end_date": {"type": "string", "description": "退房日期 YYYY-MM-DD"},
+                },
+                "required": ["pet_name", "start_date", "end_date"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -476,6 +500,7 @@ TOOL_DEFINITIONS = [
 ]
 
 TOOL_HANDLERS = {
+    "get_boarding_health_check": _tool_get_boarding_health_check,
     "list_my_pets": _tool_list_my_pets,
     "get_pet_health_records": _tool_get_pet_health_records,
     "get_upcoming_reminders": _tool_get_upcoming_reminders,

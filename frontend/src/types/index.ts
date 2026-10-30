@@ -152,7 +152,48 @@ export interface BoardingDraft {
   pet_name?: string | null
   kennel_code?: string | null
   nights?: number | null
+  health_check?: BoardingHealthCheck | null
 }
+
+export interface BoardingHealthCheck {
+  pet_id: number
+  pet_name: string
+  start_date: string
+  end_date: string
+  checked_on: string
+  status: 'attention' | 'ready'
+  warning_count: number
+  summary: string
+  notice: string
+  items: {
+    code: string
+    title: string
+    level: 'warning' | 'info' | 'ok'
+    detail: string
+    source_record_id: number | null
+    record_date: string | null
+    next_due_date: string | null
+  }[]
+}
+
+export type BoardingTaskKey = 'pending' | 'arrivals' | 'departures' | 'missing_reports' | 'abnormal_reports'
+
+export interface BoardingTaskItem {
+  order_id: number
+  pet_id: number
+  pet_name: string
+  kennel_code: string
+  start_date: string
+  end_date: string
+  status: BoardingOrderStatus
+  payment_status: 'unpaid' | 'paid' | 'refunded'
+  report_id: number | null
+  report_date: string | null
+  abnormal_reasons: string[]
+}
+
+export type BoardingTasks = { date: string; counts: Record<BoardingTaskKey, number> }
+  & Record<BoardingTaskKey, BoardingTaskItem[]>
 
 export interface BoardingDraftPayload {
   pet_id: number

@@ -58,16 +58,21 @@ const todayText = computed(() =>
   }).format(new Date()),
 )
 
-const userOptions = [
+const userOptions = computed(() => [
   { label: '个人中心', key: 'profile' },
+  ...(isAdmin.value ? [{ label: '管理控制台', key: 'admin' }] : []),
   { label: '退出登录', key: 'logout' },
-]
+])
 
 function isActive(item: { match: string[] }): boolean {
   return item.match.includes(String(route.name))
 }
 
 function onUserSelect(key: string | number): void {
+  if (key === 'admin' && isAdmin.value) {
+    router.push('/admin')
+    return
+  }
   if (key === 'profile') {
     router.push(accountItem.to)
     return

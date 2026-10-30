@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { NButton, NInput } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
+import BoardingHealthCard from '@/components/BoardingHealthCard.vue'
 import { getConversation, listConversations, streamChat } from '@/api/agent'
 import type {
   AgentConversation,
@@ -68,6 +69,7 @@ const boundaries = [
 const toolLabels: Record<string, string> = {
   list_my_pets: '查询宠物',
   get_pet_health_records: '查询健康记录',
+  get_boarding_health_check: '寄养前健康检查',
   get_upcoming_reminders: '查询到期提醒',
   check_kennel_availability: '检查寄养空档',
   create_boarding_draft: '生成预约草稿',
@@ -514,6 +516,7 @@ onBeforeUnmount(() => {
                     <strong>¥{{ bubble.draft.total_amount }}</strong>
                   </div>
                 </div>
+                <BoardingHealthCard v-if="bubble.draft.health_check" :check="bubble.draft.health_check" />
                 <div class="draft-foot">
                   <span>{{ draftHint(bubble.draft) }}，确认后才会生成订单</span>
                   <n-button

@@ -44,6 +44,15 @@ def create_draft(
     return client.post("/api/boarding/drafts", headers=headers, json=payload)
 
 
+def pay_order(client, headers, order_id: int):
+    from urllib.parse import parse_qs, urlparse
+
+    payment = client.post("/api/payments", headers=headers, json={"order_id": order_id}).json()["data"]
+    token = parse_qs(urlparse(payment["qr_content"]).query)["token"][0]
+    response = client.post("/api/payments/mock/notify", json={"payment_no": payment["payment_no"], "token": token})
+    assert response.json()["code"] == 200, response.text
+
+
 def test_kennel_admin_only_crud(client, admin_headers, owner_headers, staff_headers):
     resp = client.post(
         "/api/kennels",
@@ -262,7 +271,7 @@ def test_staff_workflow_and_daily_reports(
     pet = create_pet(client, owner_headers).json()["data"]
     kennel = create_kennel(client, admin_headers)
     draft = create_draft(
-        client, owner_headers, pet["id"], kennel["id"], day(50), day(53)
+        client, owner_headers, pet["id"], kennel["id"], day(0), day(3)
     ).json()["data"]
 
     order = client.post(
@@ -288,6 +297,8 @@ def test_staff_workflow_and_daily_reports(
     assert confirmed["status"] == "confirmed"
     assert confirmed["confirmed_at"] is not None
 
+    pay_order(client, owner_headers, order["id"])
+
     resp = client.post(
         f"/api/boarding/orders/{order['id']}/check-in", headers=staff_headers
     )
@@ -298,7 +309,7 @@ def test_staff_workflow_and_daily_reports(
     assert current["status"] == "occupied"
 
     report_payload = {
-        "report_date": day(51),
+        "report_date": day(1),
         "appetite": "good",
         "stool": "normal",
         "spirit": "good",
@@ -322,7 +333,7 @@ def test_staff_workflow_and_daily_reports(
     resp = client.post(
         f"/api/boarding/orders/{order['id']}/reports",
         headers=owner_headers,
-        json={**report_payload, "report_date": day(52)},
+        json={**report_payload, "report_date": day(2)},
     )
     assert resp.json()["code"] == 403
 
@@ -331,7 +342,7 @@ def test_staff_workflow_and_daily_reports(
         headers=staff_headers,
         json={
             **report_payload,
-            "report_date": day(52),
+            "report_date": day(2),
             "photos": ["https://example.com/tracker.png"],
         },
     )

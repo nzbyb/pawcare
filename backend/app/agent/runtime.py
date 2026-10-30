@@ -292,6 +292,8 @@ def _summarize(name: str, result: dict) -> str:
         return f"找到 {len(data.get('pets', []))} 只宠物"
     if name == "get_pet_health_records":
         return f"找到 {len(data.get('records', []))} 条健康记录"
+    if name == "get_boarding_health_check":
+        return str(data.get("summary") or "已完成寄养前资料核对")
     if name == "get_upcoming_reminders":
         return f"找到 {len(data.get('reminders', []))} 条提醒"
     if name == "check_kennel_availability":

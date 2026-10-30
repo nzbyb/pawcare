@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
   NDatePicker,
@@ -11,9 +11,11 @@ import {
   NSpin,
   NTag,
   useMessage,
+  useDialog,
 } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
+import BoardingHealthCard from '@/components/BoardingHealthCard.vue'
 import PaymentModal from '@/components/PaymentModal.vue'
 import {
   cancelDraft as cancelDraftApi,
@@ -28,6 +30,7 @@ import {
   listDrafts,
   listOrders,
   listReports,
+  getBoardingHealthCheck,
 } from '@/api/boarding'
 import { listPets } from '@/api/pets'
 import { uploadImage, validateImage } from '@/api/uploads'
@@ -35,6 +38,7 @@ import { useAuthStore } from '@/stores/auth'
 import type {
   BoardingDraft,
   BoardingOrder,
+  BoardingHealthCheck,
   DailyReport,
   Kennel,
   KennelSize,
@@ -47,6 +51,57 @@ type OrderAction = 'confirm' | 'check-in' | 'check-out' | 'cancel'
 const auth = useAuthStore()
 const message = useMessage()
 const router = useRouter()
+const route = useRoute()
+const dialog = useDialog()
+const healthCheck = ref<BoardingHealthCheck | null>(null)
+const healthLoading = ref(false)
+const healthFailed = ref(false)
+let healthRequest = 0
+let availabilityRequest = 0
+
+async function refreshHealth(): Promise<void> {
+  const requestId = ++healthRequest
+  healthCheck.value = null
+  healthFailed.value = false
+  if (!isOwner.value || !petId.value || !dateRange.value) {
+    healthLoading.value = false
+    return
+  }
+  healthLoading.value = true
+  try {
+    const result = await getBoardingHealthCheck({
+      pet_id: petId.value, start_date: dateRange.value[0], end_date: dateRange.value[1],
+    })
+    if (requestId === healthRequest) healthCheck.value = result
+  } catch {
+    if (requestId === healthRequest) healthFailed.value = true
+  } finally {
+    if (requestId === healthRequest) healthLoading.value = false
+  }
+}
+
+function checkInReason(order: BoardingOrder): string {
+  if (order.payment_status !== 'paid' || order.paid_amount < order.total_amount) return '请先完成全额付款'
+  const today = isoDate(0)
+  if (today < order.start_date) return `入住日期为 ${order.start_date}`
+  if (today >= order.end_date) return '已超出预约入住期间'
+  return ''
+}
+
+function requestOrderAction(order: BoardingOrder, action: OrderAction): void {
+  if (action !== 'cancel' && action !== 'check-out') {
+    void runOrderAction(order, action)
+    return
+  }
+  dialog.warning({
+    title: action === 'cancel' ? '确认取消预约' : '确认办理退房',
+    content: action === 'cancel'
+      ? `取消 ${order.pet_name ?? '该宠物'} 的预约后将释放笼舍档期。`
+      : `确认 ${order.pet_name ?? '该宠物'} 已完成交接并离店？退房后订单将结束。`,
+    positiveText: '确认', negativeText: '返回',
+    onPositiveClick: () => runOrderAction(order, action),
+  })
+}
 
 const isOwner = computed(() => auth.user?.role === 'pet_owner')
 const isStaff = computed(
@@ -321,18 +376,21 @@ async function search(): Promise<void> {
     return
   }
   searching.value = true
+  const requestId = ++availabilityRequest
   try {
     const [start, end] = dateRange.value
-    kennels.value = await checkAvailability({
+    const result = await checkAvailability({
       start_date: start,
       end_date: end,
       size: size.value === 'all' ? undefined : (size.value as KennelSize),
     })
+    if (requestId !== availabilityRequest) return
+    kennels.value = result
     kennelId.value = kennels.value[0]?.id ?? null
   } catch {
-    kennels.value = []
+    if (requestId === availabilityRequest) kennels.value = []
   } finally {
-    searching.value = false
+    if (requestId === availabilityRequest) searching.value = false
   }
 }
 
@@ -520,10 +578,24 @@ async function submitReport(): Promise<void> {
   }
 }
 
+watch([petId, dateRange], () => { void refreshHealth() }, { deep: true })
+watch([dateRange, size], () => {
+  availabilityRequest++
+  searching.value = false
+  kennels.value = []
+  kennelId.value = null
+}, { deep: true })
+
 onMounted(async () => {
   dateRange.value = [isoDate(7), isoDate(10)]
   await load()
-  await search()
+  if (isOwner.value) await search()
+  const selected = orders.value.find(order => String(order.id) === route.query.order)
+  if (selected) {
+    await nextTick()
+    document.getElementById(`boarding-order-${selected.id}`)?.scrollIntoView({ block: 'center' })
+    if (route.query.reports === '1') await openReports(selected)
+  }
 })
 
 onBeforeUnmount(stopCountdown)
@@ -574,6 +646,7 @@ onBeforeUnmount(stopCountdown)
               v-model:formatted-value="dateRange"
               type="daterange"
               value-format="yyyy-MM-dd"
+              :is-date-disabled="(timestamp: number) => timestamp < new Date(`${isoDate(0)}T00:00:00`).getTime()"
               clearable
               style="width: 100%"
             />
@@ -631,6 +704,14 @@ onBeforeUnmount(stopCountdown)
           />
         </label>
 
+        <n-spin :show="healthLoading" class="booking-health">
+          <BoardingHealthCard v-if="healthCheck" :check="healthCheck" />
+          <div v-else-if="healthFailed" role="alert">
+            <p>健康资料核对失败，请重试。</p>
+            <n-button size="small" @click="refreshHealth">重新核对</n-button>
+          </div>
+        </n-spin>
+
         <n-button
           type="primary"
           size="large"
@@ -661,6 +742,8 @@ onBeforeUnmount(stopCountdown)
             <div><span>晚数</span><strong>{{ draft.nights }} 晚</strong></div>
             <div><span>房费</span><strong>¥{{ draft.total_amount }}</strong></div>
           </div>
+
+          <BoardingHealthCard v-if="draft.health_check" :check="draft.health_check" class="booking-health" />
 
           <n-button
             type="primary"
@@ -713,7 +796,8 @@ onBeforeUnmount(stopCountdown)
 
       <n-spin :show="loading">
         <div v-if="filteredOrders.length" class="order-list">
-          <article v-for="order in filteredOrders" :key="order.id" class="order-card">
+          <article v-for="order in filteredOrders" :id="`boarding-order-${order.id}`" :key="order.id"
+            class="order-card" :class="{ 'selected-order': String(order.id) === route.query.order }">
             <div class="order-main">
               <div class="order-title">
                 <strong>{{ order.pet_name || `宠物 #${order.pet_id}` }}</strong>
@@ -733,7 +817,7 @@ onBeforeUnmount(stopCountdown)
                 >
                   已退款
                 </n-tag>
-                <n-tag v-else-if="canPay(order)" size="small" type="warning">
+                <n-tag v-else-if="order.status !== 'cancelled'" size="small" type="warning">
                   待支付
                 </n-tag>
               </div>
@@ -758,6 +842,9 @@ onBeforeUnmount(stopCountdown)
                 </li>
               </ol>
               <p v-if="order.note" class="order-note">{{ order.note }}</p>
+              <p v-if="isStaff && order.status === 'confirmed' && checkInReason(order)" class="order-note">
+                {{ checkInReason(order) }}
+              </p>
             </div>
 
             <div class="order-side">
@@ -801,6 +888,8 @@ onBeforeUnmount(stopCountdown)
                     size="small"
                     type="primary"
                     :loading="actioningId === order.id"
+                    :disabled="Boolean(checkInReason(order))"
+                    :title="checkInReason(order)"
                     @click="runOrderAction(order, 'check-in')"
                   >
                     办理入住
@@ -810,7 +899,7 @@ onBeforeUnmount(stopCountdown)
                     size="small"
                     type="primary"
                     :loading="actioningId === order.id"
-                    @click="runOrderAction(order, 'check-out')"
+                    @click="requestOrderAction(order, 'check-out')"
                   >
                     办理退房
                   </n-button>
@@ -821,7 +910,7 @@ onBeforeUnmount(stopCountdown)
                   size="small"
                   quaternary
                   :loading="actioningId === order.id"
-                  @click="runOrderAction(order, 'cancel')"
+                  @click="requestOrderAction(order, 'cancel')"
                 >
                   取消
                 </n-button>
@@ -940,6 +1029,8 @@ onBeforeUnmount(stopCountdown)
 </template>
 
 <style scoped>
+.booking-health { margin-bottom: 16px; }
+.order-card.selected-order { background: var(--pc-primary-soft); outline: 1px solid var(--pc-primary); outline-offset: -1px; }
 .title-row {
   display: flex;
   align-items: center;

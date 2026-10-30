@@ -7,6 +7,53 @@ from pydantic import BaseModel, ConfigDict, Field
 KennelSize = Literal["small", "medium", "large"]
 
 
+class BoardingHealthItem(BaseModel):
+    code: str
+    title: str
+    level: Literal["warning", "info", "ok"]
+    detail: str
+    source_record_id: int | None = None
+    record_date: date | None = None
+    next_due_date: date | None = None
+
+
+class BoardingHealthCheck(BaseModel):
+    pet_id: int
+    pet_name: str
+    start_date: date
+    end_date: date
+    checked_on: date
+    status: Literal["attention", "ready"]
+    warning_count: int
+    summary: str
+    notice: str
+    items: list[BoardingHealthItem]
+
+
+class BoardingTaskItem(BaseModel):
+    order_id: int
+    pet_id: int
+    pet_name: str
+    kennel_code: str
+    start_date: date
+    end_date: date
+    status: str
+    payment_status: str
+    report_id: int | None = None
+    report_date: date | None = None
+    abnormal_reasons: list[str] = Field(default_factory=list)
+
+
+class BoardingTasks(BaseModel):
+    date: date
+    counts: dict[str, int]
+    pending: list[BoardingTaskItem]
+    arrivals: list[BoardingTaskItem]
+    departures: list[BoardingTaskItem]
+    missing_reports: list[BoardingTaskItem]
+    abnormal_reports: list[BoardingTaskItem]
+
+
 class KennelResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,6 +142,7 @@ class BoardingDraftResponse(BaseModel):
     pet_name: str | None = None
     kennel_code: str | None = None
     nights: int | None = None
+    health_check: BoardingHealthCheck | None = None
 
 
 class DraftConfirmRequest(BaseModel):

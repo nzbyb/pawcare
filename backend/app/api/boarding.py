@@ -9,6 +9,8 @@ from app.dependencies.auth import get_current_admin, get_current_user, require_r
 from app.models.user import User
 from app.schemas.boarding import (
     BoardingDraftCreate,
+    BoardingHealthCheck,
+    BoardingTasks,
     DailyReportCreate,
     DailyReportResponse,
     DraftConfirmRequest,
@@ -17,9 +19,32 @@ from app.schemas.boarding import (
     KennelSize,
     KennelUpdate,
 )
-from app.services import boarding_service
+from app.services import boarding_health_service, boarding_service, boarding_task_service
 
 router = APIRouter(tags=["寄养"])
+
+
+@router.get("/boarding/health-check", response_model=Response)
+def get_boarding_health_check(
+    pet_id: int = Query(..., gt=0),
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=BoardingHealthCheck.model_validate(
+        boarding_health_service.check_health(db, current_user, pet_id, start_date, end_date)
+    ).model_dump())
+
+
+@router.get("/boarding/tasks/today", response_model=Response)
+def get_boarding_tasks(
+    current_user: User = Depends(require_roles("boarding_staff", "admin")),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=BoardingTasks.model_validate(
+        boarding_task_service.today_tasks(db, current_user)
+    ).model_dump())
 
 
 @router.get("/kennels", response_model=Response)
