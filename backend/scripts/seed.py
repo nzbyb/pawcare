@@ -21,6 +21,7 @@ from app.models.boarding import (
     BoardingOrder,
     Kennel,
 )
+from app.models.content import Announcement
 from app.models.knowledge import KnowledgeChunk
 from app.models.payment import PaymentOrder
 from app.models.pet import Pet, WeightRecord
@@ -323,6 +324,64 @@ def seed_health(db, owner: User, pet: Pet, records: list[dict]) -> None:
         )
 
 
+ANNOUNCEMENTS = [
+    {
+        "title": "国庆假期寄养预约安排",
+        "category": "notice",
+        "content": (
+            "假期间笼舍紧张，建议提前 7 天完成预约并全额支付。\n"
+            "入住当天请携带免疫记录，店内会再次核对疫苗与驱虫有效期。"
+        ),
+        "audience": "pet_owner",
+        "is_pinned": True,
+    },
+    {
+        "title": "每日照护报告填写规范",
+        "category": "policy",
+        "content": (
+            "每天 21:00 前提交当日报告，食欲、排便、精神三项为必填。\n"
+            "出现呕吐、便血或持续拒食时，先在报告里标记异常，再电话联系宠物主。"
+        ),
+        "audience": "boarding_staff",
+        "is_pinned": False,
+    },
+    {
+        "title": "PawCare 演示环境使用说明",
+        "category": "notice",
+        "content": (
+            "演示环境所有账号与订单均为合成数据，支付走沙箱渠道，不产生真实扣款。\n"
+            "智能助手只生成预约草稿，确认动作需要在预约页手动点击。"
+        ),
+        "audience": "all",
+        "is_pinned": True,
+    },
+]
+
+
+def seed_announcements(db, admin: User) -> int:
+    created = 0
+    for item in ANNOUNCEMENTS:
+        exists = db.query(Announcement).filter(Announcement.title == item["title"]).first()
+        if exists:
+            continue
+        db.add(
+            Announcement(
+                title=item["title"],
+                category=item["category"],
+                content=item["content"],
+                audience=item["audience"],
+                status="published",
+                is_pinned=item["is_pinned"],
+                publish_at=datetime.now() - timedelta(days=2),
+                created_by=admin.id,
+            )
+        )
+        created += 1
+    if created:
+        db.commit()
+    return created
+
+
 def seed_knowledge(db) -> int:
     created = 0
     for item in KNOWLEDGE_DOCS:
@@ -362,6 +421,7 @@ def main() -> None:
         users = {item["username"]: get_or_create_user(db, item) for item in ACCOUNTS}
         owner = users["owner"]
         owner2 = users["owner2"]
+        announcement_count = seed_announcements(db, users["admin"])
 
         kennels = {
             code: get_or_create_kennel(db, code, size, price, note)
@@ -563,6 +623,7 @@ def main() -> None:
         print("  寄养员：staff / Staff12345")
         print("  管理员：admin / Admin12345")
         print(f"  笼舍 {len(kennels)} 间，宠物 3 只，订单 3 笔（可重复执行）")
+        print(f"  公告 {len(ANNOUNCEMENTS)} 条（本次新增 {announcement_count} 条）")
         print(
             f"  护理知识库 {len(KNOWLEDGE_DOCS)} 篇"
             f"（本次新增 {knowledge_count} 篇，向量首次检索时生成）"
