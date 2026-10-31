@@ -124,7 +124,7 @@ def test_availability_and_draft_confirm(
     assert confirm_resp.json()["code"] == 200
     assert order["status"] == "pending"
     assert order["draft_id"] == draft["id"]
-    assert order["deposit"] == 79.2
+    assert order["deposit"] == 0  # 新订单统一全款，保留字段兼容历史数据。
 
     # 订单落库后，重叠档期不再可用；半开区间边界仍可用
     resp = client.get(
@@ -309,7 +309,7 @@ def test_staff_workflow_and_daily_reports(
     assert current["status"] == "occupied"
 
     report_payload = {
-        "report_date": day(1),
+        "report_date": day(0),
         "appetite": "good",
         "stool": "normal",
         "spirit": "good",

@@ -7,6 +7,7 @@ Agent 只能生成 pending 草稿；订单必须由用户在独立的 REST 接�
 from datetime import date, datetime, timedelta
 from uuid import uuid4
 
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -38,7 +39,7 @@ ACTIVE_ORDER_STATUSES = ("pending", "confirmed", "checked_in", "boarding")
 ORDER_STATUSES = ACTIVE_ORDER_STATUSES + ("completed", "cancelled")
 DRAFT_TTL_MINUTES = 15
 MAX_STAY_NIGHTS = 60
-DEPOSIT_RATE = 0.3
+DEPOSIT_RATE = 0  # 兼容历史字段；新预约统一全款支付，无单独定金。
 
 
 def _audit(
@@ -76,6 +77,21 @@ def _validate_period(start_date, end_date) -> int:
     return nights
 
 
+def occupancy_condition(start_date, end_date):
+    """预约使用半开区间；逾期仍在住的订单在退房前持续占用后续档期。"""
+    return and_(
+        BoardingOrder.status.in_(ACTIVE_ORDER_STATUSES),
+        or_(
+            and_(BoardingOrder.start_date < end_date, BoardingOrder.end_date > start_date),
+            and_(
+                BoardingOrder.status.in_(("checked_in", "boarding")),
+                BoardingOrder.end_date <= date.today(),
+                end_date > date.today(),
+            ),
+        ),
+    )
+
+
 def _has_overlap(
     db: Session,
     kennel_id: int,
@@ -87,9 +103,7 @@ def _has_overlap(
     """半开区间 [start, end) 的重叠判断。"""
     query = db.query(BoardingOrder.id).filter(
         BoardingOrder.kennel_id == kennel_id,
-        BoardingOrder.status.in_(ACTIVE_ORDER_STATUSES),
-        BoardingOrder.start_date < end_date,
-        BoardingOrder.end_date > start_date,
+        occupancy_condition(start_date, end_date),
     )
     if exclude_order_id is not None:
         query = query.filter(BoardingOrder.id != exclude_order_id)
@@ -101,9 +115,7 @@ def _has_overlap(
 def _pet_has_overlap(db: Session, pet_id: int, start_date, end_date, *, lock: bool = False) -> bool:
     query = db.query(BoardingOrder.id).filter(
         BoardingOrder.pet_id == pet_id,
-        BoardingOrder.status.in_(ACTIVE_ORDER_STATUSES),
-        BoardingOrder.start_date < end_date,
-        BoardingOrder.end_date > start_date,
+        occupancy_condition(start_date, end_date),
     )
     if lock:
         query = query.with_for_update()
@@ -114,8 +126,8 @@ def _get_kennel(db: Session, kennel_id: int) -> Kennel:
     kennel = db.get(Kennel, kennel_id)
     if not kennel:
         raise BusinessException(message="笼舍不存在")
-    if kennel.status == "maintenance":
-        raise BusinessException(message="该笼舍正在维护")
+    if kennel.status in ("maintenance", "cleaning"):
+        raise BusinessException(message="该笼舍正在维护或清洁")
     return kennel
 
 
@@ -128,12 +140,10 @@ def check_availability(
 ) -> list[Kennel]:
     _validate_period(start_date, end_date)
     occupied = db.query(BoardingOrder.kennel_id).filter(
-        BoardingOrder.status.in_(ACTIVE_ORDER_STATUSES),
-        BoardingOrder.start_date < end_date,
-        BoardingOrder.end_date > start_date,
+        occupancy_condition(start_date, end_date),
     )
     query = db.query(Kennel).filter(
-        Kennel.status != "maintenance",
+        Kennel.status.notin_(("maintenance", "cleaning")),
         ~Kennel.id.in_(occupied),
     )
     if size:
@@ -368,8 +378,8 @@ def confirm_draft(
     )
     if not kennel:
         raise BusinessException(message="笼舍不存在")
-    if kennel.status == "maintenance":
-        raise BusinessException(message="该笼舍正在维护", code=409)
+    if kennel.status in ("maintenance", "cleaning"):
+        raise BusinessException(message="该笼舍正在维护或清洁", code=409)
     if _has_overlap(db, kennel.id, draft.start_date, draft.end_date, lock=True):
         db.rollback()
         raise BusinessException(message="笼舍刚刚被预订，请重新选择", code=409)
@@ -593,7 +603,7 @@ def check_out(db: Session, user: User, order_id: int) -> BoardingOrder:
         raise BusinessException(message="订单不存在")
     if order.status == "completed":
         return order
-    if order.status != "checked_in":
+    if order.status not in ("checked_in", "boarding"):
         raise BusinessException(message="只有入住中的订单可以退房", code=409)
 
     order.status = "completed"
@@ -633,6 +643,12 @@ def cancel_order(db: Session, user: User, order_id: int) -> BoardingOrder:
         raise BusinessException(message="当前订单状态不能取消", code=409)
 
     order.status = "cancelled"
+    from app.models.payment import PaymentOrder
+    from app.services.refund_service import enqueue
+    for payment in db.query(PaymentOrder).filter(
+        PaymentOrder.order_id == order.id, PaymentOrder.status == "paid",
+    ).all():
+        enqueue(db, order, payment, "取消未入住订单，全额退款待管理员审核")
     _audit(db, user.id, "boarding_order.cancel", "boarding_order", order.id)
     pet_name = _pet_name(db, order.pet_id)
     if user.id == order.owner_id:
@@ -672,8 +688,13 @@ def add_daily_report(
         raise BusinessException(message="订单不存在")
     if order.status not in ("checked_in", "boarding", "completed"):
         raise BusinessException(message="该订单还不能填写日报", code=409)
-    if not (order.start_date <= data.report_date <= order.end_date):
-        raise BusinessException(message="日报日期必须在寄养日期范围内")
+    first_day = order.checked_in_at.date() if order.checked_in_at else order.start_date
+    # 预约结束不等于实际离店，逾期在住的宠物仍需每日照护。
+    last_day = date.today()
+    if order.status == "completed":
+        last_day = min(last_day, order.checked_out_at.date() if order.checked_out_at else order.end_date)
+    if not (first_day <= data.report_date <= last_day):
+        raise BusinessException(message="日报日期必须在实际入住至今天（或实际退房日）的范围内")
     if data.photos:
         if len(data.photos) > 6:
             raise BusinessException(message="日报最多上传 6 张照片")
@@ -747,6 +768,11 @@ def order_payload(db: Session, order: BoardingOrder) -> dict:
     payload.pet_name = pet.name if pet else None
     payload.kennel_code = kennel.code if kennel else None
     payload.nights = (order.end_date - order.start_date).days
+    from app.models.refund import RefundOrder
+    refunds = db.query(RefundOrder).filter(RefundOrder.order_id == order.id).order_by(RefundOrder.id.desc()).all()
+    from app.services.refund_service import payload as refund_payload
+    payload.refund = refund_payload(refunds[0]) if refunds else None
+    payload.refunded_amount = sum(float(row.amount) for row in refunds if row.status == "succeeded")
     return payload.model_dump()
 
 

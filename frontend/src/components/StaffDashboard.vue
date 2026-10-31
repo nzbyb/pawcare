@@ -27,7 +27,12 @@ async function load(): Promise<void> {
   loading.value = true
   failed.value = false
   try {
+    const firstLoad = data.value === null
     data.value = await getBoardingTasks()
+    if (firstLoad || !data.value.counts[active.value]) {
+      const priority: BoardingTaskKey[] = ['abnormal_reports', 'departures', 'missing_reports', 'arrivals', 'pending']
+      active.value = priority.find(key => data.value!.counts[key] > 0) ?? 'arrivals'
+    }
   } catch {
     failed.value = true
   } finally {
@@ -50,7 +55,7 @@ onMounted(load)
     <header class="page-header">
       <div>
         <h1 class="page-title">今日寄养任务</h1>
-        <p class="page-subtitle">{{ data?.date || '今天' }} · 接单、入住、照护和退房集中处理。</p>
+        <p class="page-subtitle">{{ data?.date || '今天' }} · 含未来待接单、今日照护及逾期未退房任务。</p>
       </div>
       <div class="header-actions">
         <n-button v-if="auth.user?.role === 'admin'" @click="router.push('/admin')">运营管理</n-button>
@@ -66,7 +71,7 @@ onMounted(load)
       <template v-else>
         <div class="task-metrics" role="group" aria-label="选择任务类型">
           <button v-for="group in groups" :key="group.key" type="button" class="soft-card task-metric"
-            :class="{ active: active === group.key, danger: group.key === 'abnormal_reports' }"
+            :class="{ active: active === group.key, danger: group.key === 'abnormal_reports' && (data?.counts[group.key] ?? 0) > 0 }"
             :aria-pressed="active === group.key" @click="active = group.key">
             <span>{{ group.label }}</span>
             <strong>{{ data?.counts[group.key] ?? '—' }}</strong>

@@ -26,6 +26,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import {
   createHealthRecord,
   deleteHealthRecord,
+  updateHealthRecord,
   listHealthRecords,
   listReminders,
   updateReminder,
@@ -70,6 +71,7 @@ const loading = ref(true)
 const activeTab = ref<string | number>('weight')
 const showEdit = ref(false)
 const showHealthModal = ref(false)
+const editingRecordId = ref<number | null>(null)
 const showWeightModal = ref(false)
 const savingHealth = ref(false)
 const reminderBusy = ref<{ id: number; action: 'done' | 'snooze' } | null>(null)
@@ -254,11 +256,22 @@ function onTabChange(key: string | number): void {
 }
 
 function openHealthModal(): void {
+  editingRecordId.value = null
   healthForm.record_type = 'vaccine'
   healthForm.title = ''
   healthForm.record_date = today()
   healthForm.next_due_date = null
   healthForm.note = ''
+  showHealthModal.value = true
+}
+
+function editRecord(record: HealthRecord): void {
+  editingRecordId.value = record.id
+  Object.assign(healthForm, {
+    record_type: record.record_type, title: record.title,
+    record_date: record.record_date, next_due_date: record.next_due_date ?? null,
+    note: record.note ?? '',
+  })
   showHealthModal.value = true
 }
 
@@ -282,13 +295,15 @@ async function saveHealthRecord(): Promise<void> {
 
   savingHealth.value = true
   try {
-    await createHealthRecord(petId, {
+    const payload = {
       record_type: healthForm.record_type as HealthRecordType,
       title: healthForm.title.trim(),
       record_date: recordDate,
       next_due_date: healthForm.next_due_date || null,
       note: healthForm.note.trim() || null,
-    })
+    }
+    if (editingRecordId.value !== null) await updateHealthRecord(editingRecordId.value, payload)
+    else await createHealthRecord(petId, payload)
     message.success('健康记录已保存')
     showHealthModal.value = false
     await load()
@@ -478,8 +493,9 @@ onBeforeUnmount(() => {
                       </n-tag>
                       <strong>{{ record.title }}</strong>
                     </div>
+                    <div v-if="canEdit" class="record-actions">
+                    <n-button text size="small" @click="editRecord(record)">编辑</n-button>
                     <n-button
-                      v-if="canEdit"
                       text
                       type="error"
                       size="small"
@@ -487,6 +503,7 @@ onBeforeUnmount(() => {
                     >
                       删除
                     </n-button>
+                    </div>
                   </div>
                   <div class="record-meta">
                     <span>记录日期 {{ formatDate(record.record_date) }}</span>
@@ -571,7 +588,7 @@ onBeforeUnmount(() => {
         <n-modal
           v-model:show="showHealthModal"
           preset="card"
-          title="新增健康记录"
+          :title="editingRecordId === null ? '新增健康记录' : '编辑健康记录'"
           style="width: 540px; max-width: 92vw"
           :mask-closable="false"
         >
@@ -693,6 +710,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.record-actions { display: flex; gap: 16px; flex-shrink: 0; }
 .back-row {
   margin-bottom: 14px;
 }

@@ -226,7 +226,7 @@ onMounted(load)
                 <dd>
                   ¥{{ sheet.order.total_amount }}
                   <span class="muted">
-                    （定金 ¥{{ sheet.order.deposit }} ·
+                    （全款支付 · 已付 ¥{{ sheet.order.paid_amount }} ·
                     {{ paymentText(sheet.order.payment_status) }}）
                   </span>
                 </dd>

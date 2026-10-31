@@ -13,6 +13,8 @@ from app.models.user import User
 from app.schemas.payment import MockNotifyRequest, PaymentCreateRequest
 from app.services import payment_service
 
+from app.services import refund_service
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["支付"])
@@ -51,6 +53,16 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
         logger.exception("支付宝通知处理异常")
         return PlainTextResponse("failure")
     return PlainTextResponse("success")
+
+
+@router.post("/refunds/orders/{order_id}", response_model=Response)
+def request_refund(order_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return Response.success(data=refund_service.payload(refund_service.request_refund(db, current_user, order_id)))
+
+
+@router.post("/refunds/{refund_id}/process", response_model=Response)
+def process_refund(refund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return Response.success(data=refund_service.payload(refund_service.process_refund(db, current_user, refund_id)))
 
 
 # 静态路径必须排在 /{payment_no} 之前，否则 "mock" 会被当成支付单号。

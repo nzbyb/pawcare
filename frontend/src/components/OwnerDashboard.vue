@@ -12,7 +12,7 @@ import {
 } from '@/api/health'
 import { listPets } from '@/api/pets'
 import type { Pet, Reminder } from '@/types'
-import { daysUntil, dueLabel, formatDate, speciesLabel } from '@/utils/format'
+import { daysUntil, dueLabel, formatDate, recordTypeLabel, speciesLabel } from '@/utils/format'
 
 /** 到期前 7 天视为「即将到期」，与提醒列表的橙色标记保持一致。 */
 const SOON_DAYS = 7
@@ -208,7 +208,7 @@ onMounted(load)
         <h1>工作台</h1>
         <p>
           当前有 {{ pets.length }} 只宠物、{{ reminderRows.length }} 条提醒待处理，
-          档案、提醒和预约状态都可以在这里统一查看。
+          在这里查看档案与提醒，或前往寄养页查看预约状态。
         </p>
       </div>
       <div class="overview-actions">
@@ -246,8 +246,8 @@ onMounted(load)
         <article class="panel">
           <header class="panel-head">
             <div>
-              <h2 class="section-title">即将到期</h2>
-              <p class="panel-sub">按到期时间从近到远</p>
+              <h2 class="section-title">待处理提醒</h2>
+              <p class="panel-sub">按到期时间排序，橙色标记为七天内到期</p>
             </div>
             <span class="panel-count">{{ reminderRows.length }} 条</span>
           </header>
@@ -279,7 +279,7 @@ onMounted(load)
                     {{ reminderStateLabel(row) }}
                   </span>
                 </span>
-                <small>{{ row.pet.name }} · {{ row.reminder.reminder_type }}</small>
+                <small>{{ row.pet.name }} · {{ recordTypeLabel(row.reminder.reminder_type) }}</small>
               </span>
               <span class="reminder-side">
                 <span

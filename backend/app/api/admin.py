@@ -21,6 +21,15 @@ def get_overview(
     return Response.success(data=admin_service.overview(db))
 
 
+@router.get("/statistics", response_model=Response)
+def get_statistics(
+    days: int = Query(default=30),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=admin_service.statistics(db, days))
+
+
 @router.get("/knowledge", response_model=Response)
 def list_knowledge(
     keyword: str | None = Query(default=None, max_length=50),

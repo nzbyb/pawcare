@@ -113,7 +113,21 @@ export type BoardingOrderStatus =
   | 'completed'
   | 'cancelled'
 
+export interface RefundOrder {
+  id: number
+  refund_no: string
+  order_id: number
+  amount: number
+  status: 'requested' | 'processing' | 'succeeded' | 'failed'
+  reason: string
+  create_time: string
+  completed_at?: string | null
+  error?: string | null
+}
+
 export interface BoardingOrder {
+  refund?: RefundOrder | null
+  refunded_amount: number
   id: number
   pet_id: number
   owner_id: number
@@ -326,6 +340,8 @@ export interface AdminUserPage {
 }
 
 export interface KennelOccupancyInfo {
+  is_actual_stay: boolean
+  overdue: boolean
   order_id: number
   order_status: string
   payment_status: string
@@ -398,7 +414,7 @@ export interface AdminOverview {
     today_check_in: number
     today_check_out: number
   }
-  revenue: { paid_total: number }
+  revenue: { paid_total: number; refunded_total: number; net_total: number }
   reminders: { pending: number; due_soon: number }
   knowledge: { documents: number; chunks: number }
 }

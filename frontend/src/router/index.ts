@@ -13,6 +13,12 @@ declare module 'vue-router' {
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    // 定向查看订单由页面在异步加载完成后滚动，避免覆盖目标位置。
+    if (to.name === 'boarding' && to.query.order) return false
+    return { left: 0, top: 0 }
+  },
   routes: [
     {
       path: '/login',

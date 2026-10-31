@@ -21,6 +21,8 @@ interface ChatBubble {
   traceId?: string
   retry?: string
   stopped?: boolean
+  createdAt?: string | null
+  historical?: boolean
 }
 
 const router = useRouter()
@@ -29,7 +31,7 @@ const examples = [
   '下一次疫苗什么时候到期？',
   '第一次寄养狗狗需要准备哪些东西？',
   '帮我看看下个月有没有适合中型犬的笼舍。',
-  '预约 11 月 1 日到 11 月 5 日的寄养。',
+  '帮我查询下周五入住、周日退房的寄养空档。',
 ]
 
 const capabilities = [
@@ -61,9 +63,9 @@ const capabilities = [
 ]
 
 const boundaries = [
-  '预约确认接口不在 Agent 工具列表里，只能由你本人提交。',
-  '用户身份来自登录态，不读取模型给出的 user_id。',
-  '宠物备注和知识库内容按不可信数据处理，不作为指令执行。',
+  '预约需要你在寄养页确认，助手不会自动下单或付款。',
+  '只会在你的账号权限范围内查询资料。',
+  '护理建议供参考；出现异常症状请及时联系兽医。',
 ]
 
 const toolLabels: Record<string, string> = {
@@ -86,6 +88,8 @@ const sending = ref(false)
 const loadingHistory = ref(false)
 const streamingBubbleId = ref<number | null>(null)
 const bodyRef = ref<HTMLElement | null>(null)
+const chatShellRef = ref<HTMLElement | null>(null)
+const chatHeight = ref<number | null>(null)
 const copiedId = ref<number | null>(null)
 const now = ref(Date.now())
 let nextId = 1
@@ -94,7 +98,7 @@ let stopRequested = false
 let copyTimer: number | undefined
 let clockTimer: number | undefined
 
-const canSend = computed(() => input.value.trim().length > 0 && !sending.value)
+const canSend = computed(() => input.value.trim().length > 0 && !sending.value && !loadingHistory.value)
 const showWelcome = computed(() => messages.value.length === 0 && !loadingHistory.value)
 
 function escapeHtml(text: string): string {
@@ -129,7 +133,7 @@ function addMessage(
   content: string,
   extra: Partial<ChatBubble> = {},
 ): ChatBubble {
-  const bubble: ChatBubble = { id: nextId++, role, content, ...extra }
+  const bubble: ChatBubble = { id: nextId++, role, content, createdAt: new Date().toISOString(), ...extra }
   messages.value.push(bubble)
   return bubble
 }
@@ -165,6 +169,8 @@ async function openConversation(item: AgentConversation): Promise<void> {
         id: nextId++,
         role: message.role as 'user' | 'assistant',
         content: message.content,
+        createdAt: message.create_time,
+        historical: true,
       }))
     await scrollToBottom()
   } catch {
@@ -175,7 +181,7 @@ async function openConversation(item: AgentConversation): Promise<void> {
 }
 
 function startNewConversation(): void {
-  if (sending.value) return
+  if (sending.value || loadingHistory.value) return
   conversationId.value = null
   messages.value = []
   input.value = ''
@@ -183,7 +189,7 @@ function startNewConversation(): void {
 
 async function send(text?: string): Promise<void> {
   const content = (text ?? input.value).trim()
-  if (!content || sending.value) return
+  if (!content || sending.value || loadingHistory.value) return
 
   input.value = ''
   addMessage('user', content)
@@ -377,7 +383,15 @@ function goConfirm(): void {
   router.push('/boarding')
 }
 
+function fitChat(): void {
+  if (!chatShellRef.value) return
+  const top = chatShellRef.value.getBoundingClientRect().top + window.scrollY
+  chatHeight.value = Math.max(280, window.innerHeight - top - 16)
+}
+
 onMounted(() => {
+  void nextTick(fitChat)
+  window.addEventListener('resize', fitChat)
   void loadConversations()
   clockTimer = window.setInterval(() => {
     now.value = Date.now()
@@ -385,6 +399,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', fitChat)
   window.clearInterval(clockTimer)
   window.clearTimeout(copyTimer)
   activeController?.abort()
@@ -397,7 +412,7 @@ onBeforeUnmount(() => {
       <div>
         <div class="title-row">
           <h1 class="page-title">智能助手</h1>
-          <span class="pill sage">deepseek-flash · 已接入</span>
+          <span class="pill sage">宠物护理与寄养</span>
         </div>
         <p class="page-subtitle">
           用自然语言查询档案、检查寄养空档，并把预约整理成可确认的草稿。
@@ -410,7 +425,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="agent-grid">
-      <section class="chat-shell">
+      <section ref="chatShellRef" class="chat-shell" :style="chatHeight === null ? undefined : { height: `${chatHeight}px` }">
         <header class="chat-head">
           <div class="assistant">
             <span class="assistant-avatar"><AppIcon name="paw" :size="19" /></span>
@@ -463,6 +478,7 @@ onBeforeUnmount(() => {
               <AppIcon name="paw" :size="14" />
             </span>
             <div class="bubble" :class="bubble.role">
+              <small v-if="bubble.createdAt" class="message-time">{{ formatTime(bubble.createdAt) }}{{ bubble.historical ? ' · 历史消息，信息以当时为准' : '' }}</small>
               <div class="bubble-text" v-html="renderMessage(bubble.content)"></div>
               <div
                 v-if="bubble.id === streamingBubbleId && !bubble.content"
@@ -549,6 +565,7 @@ onBeforeUnmount(() => {
                 >
                   {{ copiedId === bubble.id ? '已复制' : '复制' }}
                 </button>
+                <button v-if="bubble.historical" class="bubble-tool" :disabled="sending" @click="input = '请重新查询最新状态：' + (messages.slice(0, messages.indexOf(bubble)).reverse().find(item => item.role === 'user')?.content ?? '当前宠物的健康提醒')">重新查询最新状态</button>
                 <button
                   v-if="bubble.retry"
                   type="button"
@@ -609,13 +626,15 @@ onBeforeUnmount(() => {
       </section>
 
       <aside class="side">
+        <details class="side-details">
+          <summary>对话记录与使用说明</summary>
         <section class="side-card">
           <div class="side-head">
             <h2 class="section-title">对话记录</h2>
             <span class="side-count">{{ conversations.length }}</span>
           </div>
           <div v-if="conversations.length === 0" class="empty-history">
-            还没有对话。从右边的问题开始试试。
+            还没有对话，可以从示例问题开始。
           </div>
           <div v-else class="conversation-list">
             <button
@@ -656,12 +675,17 @@ onBeforeUnmount(() => {
             </li>
           </ul>
         </section>
+        </details>
       </aside>
     </div>
   </div>
 </template>
 
 <style scoped>
+.message-time { display: block; color: var(--pc-ink-soft); margin-bottom: 8px; font-size: 11px; }
+.chat-head, .chat-input { flex-shrink: 0; }
+.side-details > summary { cursor: pointer; padding: 16px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius); font-size: 13px; color: var(--pc-primary); background: var(--pc-surface); }
+.side-details[open] > summary { margin-bottom: 12px; }
 .title-row {
   display: flex;
   align-items: center;
@@ -685,7 +709,8 @@ onBeforeUnmount(() => {
 .chat-shell {
   display: flex;
   height: calc(100vh - 190px);
-  min-height: 620px;
+  min-height: 280px;
+  height: calc(100dvh - 200px);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--pc-line);
@@ -759,6 +784,7 @@ onBeforeUnmount(() => {
 }
 
 .chat-body {
+  min-height: 0;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1285,7 +1311,7 @@ onBeforeUnmount(() => {
   }
 
   .chat-shell {
-    height: 70vh;
+    height: calc(100dvh - 200px);
   }
 }
 

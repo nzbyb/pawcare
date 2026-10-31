@@ -31,6 +31,8 @@ import {
   listOrders,
   listReports,
   getBoardingHealthCheck,
+  requestRefund,
+  processRefund,
 } from '@/api/boarding'
 import { listPets } from '@/api/pets'
 import { uploadImage, validateImage } from '@/api/uploads'
@@ -80,6 +82,40 @@ async function refreshHealth(): Promise<void> {
   }
 }
 
+const refundLabels: Record<string, string> = {
+  requested: '退款待审核', processing: '退款处理中', succeeded: '退款已完成', failed: '退款待核对',
+}
+
+async function applyRefund(order: BoardingOrder): Promise<void> {
+  if (actioningId.value !== null) return
+  actioningId.value = order.id
+  try {
+    await requestRefund(order.id)
+    message.success('退款申请已提交，等待管理员审核')
+    await load()
+  } catch { /* 统一错误提示 */ }
+  finally { actioningId.value = null }
+}
+
+function reviewRefund(order: BoardingOrder): void {
+  dialog.warning({
+    title: '审核并原路退款',
+    content: `核对订单 #${order.id} 已取消，确认原路退回 ¥${order.refund?.amount}？重复处理会沿用原退款号。`,
+    positiveText: '确认退款', negativeText: '返回',
+    onPositiveClick: async () => {
+      if (!order.refund || actioningId.value !== null) return
+      actioningId.value = order.id
+      try {
+        const result = await processRefund(order.refund.id)
+        if (result.status === 'succeeded') message.success('退款已完成')
+        else message.warning(result.error || '渠道尚未确认，请稍后核对并重试')
+        await load()
+      } catch { /* 统一错误提示 */ }
+      finally { actioningId.value = null }
+    },
+  })
+}
+
 function checkInReason(order: BoardingOrder): string {
   if (order.payment_status !== 'paid' || order.paid_amount < order.total_amount) return '请先完成全额付款'
   const today = isoDate(0)
@@ -96,7 +132,7 @@ function requestOrderAction(order: BoardingOrder, action: OrderAction): void {
   dialog.warning({
     title: action === 'cancel' ? '确认取消预约' : '确认办理退房',
     content: action === 'cancel'
-      ? `取消 ${order.pet_name ?? '该宠物'} 的预约后将释放笼舍档期。`
+      ? `取消 ${order.pet_name ?? '该宠物'} 的预约后将释放笼舍档期。${order.paid_amount > 0 ? '已付款将生成全额退款申请，等待管理员审核后原路退回。' : ''}`
       : `确认 ${order.pet_name ?? '该宠物'} 已完成交接并离店？退房后订单将结束。`,
     positiveText: '确认', negativeText: '返回',
     onPositiveClick: () => runOrderAction(order, action),
@@ -126,6 +162,7 @@ const note = ref('')
 const draft = ref<BoardingDraft | null>(null)
 const countdown = ref(0)
 const statusFilter = ref('all')
+const bookingTab = ref<'new' | 'orders'>(route.query.order ? 'orders' : 'new')
 
 const payVisible = ref(false)
 const payOrder = ref<BoardingOrder | null>(null)
@@ -426,6 +463,7 @@ async function confirmCurrentDraft(): Promise<void> {
   try {
     await confirmDraftApi(draft.value.id, draft.value.idempotency_key)
     message.success('预约已确认，等待寄养员接单')
+    bookingTab.value = 'orders'
     draft.value = null
     stopCountdown()
     await Promise.all([load(), search()])
@@ -494,15 +532,20 @@ async function openReports(order: BoardingOrder): Promise<void> {
   reportOrder.value = order
   showReports.value = true
   const today = isoDate(0)
-  if (today < order.start_date) {
-    reportDate.value = order.start_date
-  } else if (today > order.end_date) {
-    reportDate.value = order.end_date
+  const firstDay = (order.checked_in_at || order.start_date).slice(0, 10)
+  if (today < firstDay) {
+    reportDate.value = firstDay
+  } else if (order.status === 'completed') {
+    reportDate.value = [today, (order.checked_out_at || order.end_date).slice(0, 10)].sort()[0]
   } else {
     reportDate.value = today
   }
   reportPhotos.value = []
   reportNote.value = ''
+  reportAppetite.value = 'good'
+  reportStool.value = 'normal'
+  reportSpirit.value = 'good'
+  reportList.value = []
   reportsLoading.value = true
   try {
     reportList.value = await listReports(order.id)
@@ -511,6 +554,17 @@ async function openReports(order: BoardingOrder): Promise<void> {
   } finally {
     reportsLoading.value = false
   }
+}
+
+function reportDateDisabled(timestamp: number): boolean {
+  if (!reportOrder.value) return true
+  const order = reportOrder.value
+  const first = (order.checked_in_at || order.start_date).slice(0, 10)
+  const last = order.status === 'completed'
+    ? [isoDate(0), (order.checked_out_at || order.end_date).slice(0, 10)].sort()[0]
+    : isoDate(0)
+  return timestamp < new Date(`${first}T00:00:00`).getTime()
+    || timestamp > new Date(`${last}T23:59:59.999`).getTime()
 }
 
 function pickReportPhotos(): void {
@@ -610,7 +664,7 @@ onBeforeUnmount(stopCountdown)
           <span class="pill sage">{{ isStaff ? '寄养员工作台' : '先草稿，后确认' }}</span>
         </div>
         <p class="page-subtitle">
-          查询笼舍空档、生成预约草稿，再由你亲自确认。订单状态和每日报告都在这里。
+          {{ isStaff ? '接收预约、核对付款和健康资料，办理入住与退房，并记录每日照护。' : '查询笼舍空档、生成预约草稿，再由你亲自确认。订单状态和每日报告都在这里。' }}
         </p>
       </div>
 
@@ -630,7 +684,11 @@ onBeforeUnmount(stopCountdown)
       </div>
     </div>
 
-    <div v-if="isOwner" class="booking-grid">
+    <div v-if="isOwner" class="booking-tabs" role="group" aria-label="寄养页面">
+      <n-button :type="bookingTab === 'new' ? 'primary' : 'default'" @click="bookingTab = 'new'">新建预约</n-button>
+      <n-button :type="bookingTab === 'orders' ? 'primary' : 'default'" @click="bookingTab = 'orders'">我的订单（{{ orders.length }}）</n-button>
+    </div>
+    <div v-if="isOwner && bookingTab === 'new'" class="booking-grid">
       <section class="panel">
         <header class="panel-head">
           <div>
@@ -640,7 +698,7 @@ onBeforeUnmount(stopCountdown)
         </header>
 
         <div class="field-grid">
-          <label class="field">
+          <label class="field date-field">
             <span>寄养日期</span>
             <n-date-picker
               v-model:formatted-value="dateRange"
@@ -667,7 +725,7 @@ onBeforeUnmount(stopCountdown)
 
         <div class="search-row">
           <n-button :loading="searching" @click="search">查询空档</n-button>
-          <span class="muted hint">按晚计价，退房当天不计费</span>
+          <span class="muted hint">按晚计价，退房当天不计费；确认后需付全款</span>
         </div>
 
         <div v-if="kennels.length" class="kennel-list">
@@ -771,14 +829,14 @@ onBeforeUnmount(stopCountdown)
             <ul>
               <li>草稿不会占用笼舍</li>
               <li>金额在草稿阶段就锁定</li>
-              <li>确认接口不在 Agent 工具列表里</li>
+              <li>确认前可以修改或放弃，不会产生费用</li>
             </ul>
           </div>
         </template>
       </aside>
     </div>
 
-    <section class="panel orders-panel">
+    <section v-if="isStaff || bookingTab === 'orders'" class="panel orders-panel">
       <div class="orders-head">
         <div>
           <h2 class="section-title">{{ isStaff ? '寄养订单' : '我的预约' }}</h2>
@@ -817,6 +875,7 @@ onBeforeUnmount(stopCountdown)
                 >
                   已退款
                 </n-tag>
+                <n-tag v-else-if="order.status === 'completed'" size="small" type="warning">付款记录待核对</n-tag>
                 <n-tag v-else-if="order.status !== 'cancelled'" size="small" type="warning">
                   待支付
                 </n-tag>
@@ -841,6 +900,11 @@ onBeforeUnmount(stopCountdown)
                   </span>
                 </li>
               </ol>
+              <p v-if="order.refund" class="order-note" role="status">
+                {{ refundLabels[order.refund.status] }} · ¥{{ order.refund.amount }} · {{ order.refund.refund_no }}
+                <span v-if="order.refund.error"> · {{ order.refund.error }}</span>
+              </p>
+              <p v-else-if="order.status === 'cancelled' && order.payment_status === 'paid'" class="order-note">订单已取消，付款待退；请申请退款或联系管理员核对。</p>
               <p v-if="order.note" class="order-note">{{ order.note }}</p>
               <p v-if="isStaff && order.status === 'confirmed' && checkInReason(order)" class="order-note">
                 {{ checkInReason(order) }}
@@ -850,9 +914,15 @@ onBeforeUnmount(stopCountdown)
             <div class="order-side">
               <div class="order-amount">
                 ¥{{ order.total_amount }}
-                <small>定金 ¥{{ order.deposit }}</small>
+                <small>全款支付 · 已付 ¥{{ order.paid_amount }}</small>
+                <small v-if="order.refunded_amount > 0">已退 ¥{{ order.refunded_amount.toFixed(2) }}</small>
+                <small v-if="order.status !== 'cancelled' && order.payment_status !== 'refunded'">待付 ¥{{ Math.max(0, order.total_amount - order.paid_amount).toFixed(2) }}</small>
               </div>
               <div class="order-actions">
+                <n-button v-if="order.status === 'cancelled' && order.payment_status === 'paid' && !order.refund && (isOwner || auth.user?.role === 'admin')"
+                  size="small" :loading="actioningId === order.id" @click="applyRefund(order)">申请退款</n-button>
+                <n-button v-if="auth.user?.role === 'admin' && order.refund && order.refund.status !== 'succeeded'"
+                  size="small" type="primary" secondary :loading="actioningId === order.id" @click="reviewRefund(order)">{{ order.refund.status === 'requested' ? '审核退款' : '核对并重试退款' }}</n-button>
                 <n-button
                   v-if="canPay(order)"
                   size="small"
@@ -862,10 +932,11 @@ onBeforeUnmount(stopCountdown)
                 >
                   去支付
                 </n-button>
-                <n-button size="small" quaternary @click="openReports(order)">
+                <n-button v-if="['checked_in', 'boarding', 'completed'].includes(order.status)" size="small" quaternary @click="openReports(order)">
                   日报
                 </n-button>
                 <n-button
+                  v-if="['confirmed', 'checked_in', 'boarding', 'completed'].includes(order.status)"
                   size="small"
                   quaternary
                   @click="router.push(`/boarding/orders/${order.id}/handover`)"
@@ -968,11 +1039,13 @@ onBeforeUnmount(stopCountdown)
         class="report-form"
       >
         <h3>填写日报</h3>
+        <p class="muted">请选择实际照护日期；逾期未退房期间仍可记录，不能填写未来日期。</p>
         <div class="report-form-grid">
           <n-date-picker
             v-model:formatted-value="reportDate"
             type="date"
             value-format="yyyy-MM-dd"
+            :is-date-disabled="(timestamp: number) => reportDateDisabled(timestamp)"
             style="width: 100%"
           />
           <n-select v-model:value="reportAppetite" :options="appetiteOptions" />
@@ -1029,6 +1102,9 @@ onBeforeUnmount(stopCountdown)
 </template>
 
 <style scoped>
+.booking-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+.field-grid .date-field { grid-column: 1 / -1; }
+
 .booking-health { margin-bottom: 16px; }
 .order-card.selected-order { background: var(--pc-primary-soft); outline: 1px solid var(--pc-primary); outline-offset: -1px; }
 .title-row {

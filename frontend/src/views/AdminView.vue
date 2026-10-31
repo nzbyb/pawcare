@@ -17,6 +17,7 @@ import {
 } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
+import AdminStatistics from '@/components/AdminStatistics.vue'
 import {
   getAdminOverview,
   getKennelOccupancy,
@@ -311,6 +312,8 @@ const displayStatusPills: Record<string, string> = {
 }
 
 function displayStatus(item: KennelOccupancyItem): string {
+  if (item.occupancy?.is_actual_stay) return item.occupancy.overdue ? '逾期在住' : '实际在住'
+  if (item.occupancy) return '预约预留'
   return displayStatusLabels[item.display_status] ?? item.display_status
 }
 
@@ -588,6 +591,7 @@ onMounted(() => {
       @update:value="onTabChange"
     >
       <n-tab-pane name="overview" tab="运营概览">
+        <AdminStatistics />
         <n-spin :show="overviewLoading">
           <template v-if="overview">
             <section class="overview-section">
@@ -636,8 +640,8 @@ onMounted(() => {
                   </strong>
                 </div>
                 <div class="stat">
-                  <span>累计实收</span>
-                  <strong>{{ formatMoney(overview.revenue.paid_total) }}</strong>
+                  <span>累计净收款</span>
+                  <strong>{{ formatMoney(overview.revenue.net_total) }}</strong>
                 </div>
               </div>
             </section>
@@ -748,7 +752,7 @@ onMounted(() => {
             <strong>{{ occupancySummary.total }}</strong>
           </div>
           <div class="stat">
-            <span>已占用</span>
+            <span>在住 / 预留</span>
             <strong class="warn">{{ occupancySummary.occupied }}</strong>
           </div>
           <div class="stat">
@@ -792,6 +796,8 @@ onMounted(() => {
                 </p>
                 <p class="guest-stay">
                   {{ item.occupancy.start_date }} → {{ item.occupancy.end_date }}
+                  <strong v-if="item.occupancy.overdue" class="warn"> · 逾期未退房，继续占用</strong>
+                  <span v-else> · {{ item.occupancy.is_actual_stay ? '实际在住' : '预约预留' }}</span>
                 </p>
               </div>
               <p v-else class="kennel-empty">

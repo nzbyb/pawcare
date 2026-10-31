@@ -1,4 +1,13 @@
 import { request } from './http'
+import type { RefundOrder } from '@/types'
+
+export function requestRefund(orderId: number): Promise<RefundOrder> {
+  return request.post(`/payments/refunds/orders/${orderId}`)
+}
+
+export function processRefund(refundId: number): Promise<RefundOrder> {
+  return request.post(`/payments/refunds/${refundId}/process`)
+}
 import type {
   BoardingHealthCheck,
   BoardingTasks,

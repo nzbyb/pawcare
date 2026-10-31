@@ -30,6 +30,8 @@ uploads/
 *.log
 .fastembed_cache/
 backend/evaluation/reports/
+backend/demo-data/
+demo-logs/
 .hf-cache/
 
 # IDE / OS

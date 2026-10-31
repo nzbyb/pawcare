@@ -17,7 +17,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -297,6 +297,43 @@ def _verify_response(
         )
     except InvalidSignature as exc:
         raise AlipayError("支付宝响应验签失败") from exc
+    return node
+
+
+def refund_trade(
+    *, app_id: str, private_key: str, public_key: str, gateway: str,
+    out_trade_no: str, out_request_no: str, amount: str, timeout: float = 5.0,
+) -> dict[str, Any]:
+    """使用固定退款号执行全额原路退款；只信任验签后的渠道结果。"""
+    from decimal import Decimal, InvalidOperation
+    params = _base_params(app_id, "alipay.trade.refund")
+    params["biz_content"] = json.dumps({
+        "out_trade_no": out_trade_no, "out_request_no": out_request_no,
+        "refund_amount": amount, "refund_reason": "已取消寄养订单全额退款",
+    }, ensure_ascii=False, separators=(",", ":"))
+    params["sign"] = sign_params(params, private_key)
+    # The gateway uses its URL charset while decoding POST form values. Without
+    # it a Chinese refund_reason can be decoded as GBK and fail RSA2 verification.
+    target = urlsplit(gateway)
+    query = dict(parse_qsl(target.query, keep_blank_values=True))
+    query['charset'] = 'utf-8'
+    post_url = urlunsplit(target._replace(query=urlencode(query)))
+    try:
+        response = httpx.post(post_url, data=params, timeout=timeout)
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise AlipayError("退款渠道暂不可用") from exc
+    node = _verify_response(response.content, "alipay_trade_refund_response", public_key,
+                            getattr(response, "encoding", None) or "utf-8")
+    if str(node.get("code")) != "10000" or node.get("out_trade_no") != out_trade_no:
+        raise AlipayError("退款未确认成功或返回交易号不匹配")
+    if node.get("out_request_no") not in (None, out_request_no):
+        raise AlipayError("退款请求号不匹配")
+    try:
+        if Decimal(str(node.get("refund_fee"))) != Decimal(amount):
+            raise AlipayError("退款金额不匹配")
+    except InvalidOperation as exc:
+        raise AlipayError("退款金额不合法") from exc
     return node
 
 

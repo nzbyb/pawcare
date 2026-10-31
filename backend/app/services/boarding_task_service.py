@@ -46,7 +46,7 @@ def today_tasks(db: Session, user: User) -> dict:
         if staying and order.end_date <= today:
             groups["departures"].append(item)
         report = by_order.get(order.id)
-        if staying and order.start_date <= today <= order.end_date and report is None:
+        if staying and (order.checked_in_at.date() if order.checked_in_at else order.start_date) <= today and report is None:
             groups["missing_reports"].append(item)
         if staying and report:
             reasons = []

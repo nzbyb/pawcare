@@ -47,6 +47,9 @@ def _sync_reminder(db: Session, record: HealthRecord) -> None:
     if exists:
         # 改回曾经用过的日期时，复用原提醒并重新激活，避免 dedupe_key 阻塞。
         exists.status = "pending"
+        exists.title = f"{record.title} 到期提醒"
+        exists.reminder_type = record.record_type
+        exists.notified_at = None
         return
 
     db.add(

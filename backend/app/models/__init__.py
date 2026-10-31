@@ -12,6 +12,7 @@ from app.models.knowledge import KnowledgeChunk
 from app.models.mcp import MCPAuditLog
 from app.models.pet import Attachment, Pet, WeightRecord
 from app.models.payment import PaymentOrder
+from app.models.refund import RefundOrder
 from app.models.reminder import Notification, Reminder
 from app.models.user import User
 from app.models.verification import VerificationCode
@@ -32,6 +33,7 @@ __all__ = [
     "MedicationLog",
     "Notification",
     "PaymentOrder",
+    "RefundOrder",
     "Pet",
     "Reminder",
     "User",

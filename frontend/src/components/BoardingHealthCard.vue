@@ -14,6 +14,8 @@ defineProps<{ check: BoardingHealthCheck }>()
     </div>
     <p>{{ check.pet_name }} · {{ check.start_date }} → {{ check.end_date }}</p>
     <p class="health-summary">{{ check.summary }}</p>
+    <details>
+      <summary>查看核对详情（{{ check.items.length }} 项）</summary>
     <ul>
       <li v-for="(item, index) in check.items" :key="`${item.code}-${index}`" :class="item.level">
         <strong>{{ item.title }}</strong>
@@ -23,12 +25,14 @@ defineProps<{ check: BoardingHealthCheck }>()
         </small>
       </li>
     </ul>
+    </details>
     <router-link :to="`/pets/${check.pet_id}`">查看健康档案 →</router-link>
     <small class="health-notice">{{ check.notice }} · 核对日期 {{ check.checked_on }}</small>
   </section>
 </template>
 
 <style scoped>
+summary { cursor: pointer; font-size: 12px; color: var(--pc-primary); padding: 8px 0; }
 .health-check { padding: 16px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius); background: var(--pc-primary-soft); }
 .health-check.attention { background: var(--pc-warn-soft); }
 .health-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }

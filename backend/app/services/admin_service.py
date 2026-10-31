@@ -15,6 +15,8 @@ from app.models.audit import AuditLog
 from app.models.boarding import BoardingOrder, Kennel
 from app.models.knowledge import KnowledgeChunk
 from app.models.mcp import MCPAuditLog
+from app.models.payment import PaymentOrder
+from app.models.refund import RefundOrder
 from app.models.pet import Pet
 from app.models.reminder import Reminder
 from app.models.user import User
@@ -116,11 +118,15 @@ def overview(db: Session) -> dict:
         or 0
     )
     paid_total = (
-        db.query(func.coalesce(func.sum(BoardingOrder.paid_amount), 0))
-        .filter(BoardingOrder.payment_status == "paid")
+        db.query(func.coalesce(func.sum(PaymentOrder.amount), 0))
+        .filter(PaymentOrder.status == "paid")
         .scalar()
         or 0
     )
+
+    refunded_total = db.query(func.coalesce(func.sum(RefundOrder.amount), 0)).filter(
+        RefundOrder.status == "succeeded",
+    ).scalar() or 0
 
     pending_reminders = (
         db.query(func.count(Reminder.id))
@@ -157,12 +163,49 @@ def overview(db: Session) -> dict:
             "today_check_in": today_check_in,
             "today_check_out": today_check_out,
         },
-        "revenue": {"paid_total": float(paid_total)},
+        "revenue": {"paid_total": float(paid_total), "refunded_total": float(refunded_total),
+                    "net_total": round(float(paid_total) - float(refunded_total), 2)},
         "reminders": {"pending": pending_reminders, "due_soon": due_soon},
         "knowledge": {
             "documents": knowledge_documents,
             "chunks": knowledge_chunks,
         },
+    }
+
+
+def statistics(db: Session, days: int = 30) -> dict:
+    if days not in (7, 30):
+        raise BusinessException(message="请选择最近7天或30天")
+    today = date.today()
+    start = today - timedelta(days=days - 1)
+    end = today + timedelta(days=1)
+    bookings = {str(day): count for day, count in db.query(func.date(BoardingOrder.create_time), func.count(BoardingOrder.id))
+                    .filter(BoardingOrder.create_time >= start, BoardingOrder.create_time < end)
+                    .group_by(func.date(BoardingOrder.create_time)).all()}
+    receipts = {str(day): amount for day, amount in db.query(func.date(PaymentOrder.paid_at), func.sum(PaymentOrder.amount))
+                   .filter(PaymentOrder.status == "paid", PaymentOrder.paid_at >= start, PaymentOrder.paid_at < end)
+                   .group_by(func.date(PaymentOrder.paid_at)).all()}
+    refunds = {str(day): amount for day, amount in db.query(func.date(RefundOrder.completed_at), func.sum(RefundOrder.amount))
+                  .filter(RefundOrder.status == "succeeded", RefundOrder.completed_at >= start, RefundOrder.completed_at < end)
+                  .group_by(func.date(RefundOrder.completed_at)).all()}
+    rows = []
+    for offset in range(days):
+        day = (start + timedelta(days=offset)).isoformat()
+        received, refunded = float(receipts.get(day, 0)), float(refunds.get(day, 0))
+        rows.append({"date": day, "orders": bookings.get(day, 0), "received": received,
+                     "refunded": refunded, "net": round(received - refunded, 2)})
+    kennels = db.query(func.count(Kennel.id)).scalar() or 0
+    actual = db.query(func.count(func.distinct(BoardingOrder.kennel_id))).filter(
+        BoardingOrder.status.in_(("checked_in", "boarding")),
+    ).scalar() or 0
+    return {
+        "start_date": start, "end_date": today, "daily": rows,
+        "orders": sum(row["orders"] for row in rows),
+        "received": round(sum(row["received"] for row in rows), 2),
+        "refunded": round(sum(row["refunded"] for row in rows), 2),
+        "net": round(sum(row["net"] for row in rows), 2),
+        "occupancy_rate": round(actual / kennels * 100, 1) if kennels else 0,
+        "actual_occupied": actual, "kennel_total": kennels,
     }
 
 
@@ -311,17 +354,20 @@ def kennel_occupancy(db: Session, day: date | None = None) -> dict:
     orders = (
         db.query(BoardingOrder)
         .filter(
-            BoardingOrder.end_date > day,
             or_(
-                # 已入住的宠物即使档期有偏差，今天也实际占着笼舍。
-                BoardingOrder.status.in_(("checked_in", "boarding")),
                 and_(
                     BoardingOrder.status.in_(ACTIVE_ORDER_STATUSES),
-                    BoardingOrder.start_date <= day,
+                    BoardingOrder.start_date <= day, BoardingOrder.end_date > day,
+                ),
+                # 今天及未来的预测：实际在住优先，逾期后退房时间待核实。
+                and_(
+                    BoardingOrder.status.in_(("checked_in", "boarding")),
+                    day >= date.today(),
+                    or_(BoardingOrder.end_date > day, BoardingOrder.end_date <= date.today()),
                 ),
             ),
         )
-        .order_by(BoardingOrder.start_date)
+        .order_by(BoardingOrder.status.in_(("checked_in", "boarding")).desc(), BoardingOrder.start_date)
         .all()
     )
     pets = {
@@ -346,6 +392,8 @@ def kennel_occupancy(db: Session, day: date | None = None) -> dict:
             {
                 "order_id": order.id,
                 "order_status": order.status,
+                "is_actual_stay": order.status in ("checked_in", "boarding"),
+                "overdue": order.status in ("checked_in", "boarding") and order.end_date < day,
                 "payment_status": order.payment_status,
                 "pet_name": pet.name if pet else "宠物",
                 "pet_species": pet.species if pet else None,

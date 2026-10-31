@@ -352,17 +352,6 @@ def _settle_paid(
         payment.status = "closed"
         db.commit()
         return
-    if order.status == "cancelled":
-        # 订单已取消却收到付款：沙箱环境先关闭支付单并留审计，真实环境应退款。
-        payment.status = "closed"
-        db.commit()
-        logger.warning(
-            "已取消订单收到支付，已关单待人工退款 order=%s payment=%s",
-            order.id,
-            payment.payment_no,
-        )
-        return
-
     payment.status = "paid"
     payment.paid_at = now
     payment.transaction_id = transaction_id
@@ -375,13 +364,16 @@ def _settle_paid(
         payment.id,
         {"order_id": order.id, "amount": payment.amount},
     )
+    if order.status == "cancelled":
+        from app.services.refund_service import enqueue
+        enqueue(db, order, payment, "取消后收到渠道付款，全额退款待审核")
     pet = db.get(Pet, order.pet_id)
     pet_name = pet.name if pet else "宠物"
     notification_service.create_notification(
         db,
         payment.owner_id,
         "支付成功",
-        f"{pet_name} 的寄养订单已支付 ¥{float(payment.amount):.2f}，预约正式生效。",
+        f"{pet_name} 的寄养订单已支付 ¥{float(payment.amount):.2f}。" + ("订单已取消，退款等待管理员审核。" if order.status == "cancelled" else "请按预约时间到店。"),
         category="order",
         link="/boarding",
         dedupe_key=f"order:{order.id}:paid",
