@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.common.response import Response
@@ -8,7 +9,8 @@ from app.database import get_db
 from app.dependencies.auth import get_current_admin
 from app.models.user import User
 from app.schemas.admin import UserStatusUpdate
-from app.services import admin_service
+from app.schemas.content import AnnouncementCreate, AnnouncementUpdate, FeedbackReply
+from app.services import admin_service, content_service, export_service
 
 router = APIRouter(prefix="/admin", tags=["管理端"])
 
@@ -83,6 +85,103 @@ def update_user_status(
             "status": user.status,
         },
     )
+
+
+@router.get("/statistics/export")
+def export_statistics(
+    days: int = Query(default=30),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    filename, content = export_service.statistics_workbook(db, days)
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/announcements", response_model=Response)
+def list_announcements(
+    keyword: str | None = Query(default=None, max_length=50),
+    status: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        data=content_service.list_for_admin(
+            db, keyword=keyword, status=status, page=page, page_size=page_size
+        )
+    )
+
+
+@router.post("/announcements", response_model=Response)
+def create_announcement(
+    data: AnnouncementCreate,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    row = content_service.create_announcement(db, current_user, data)
+    return Response.success(message="公告已保存", data={"id": row.id})
+
+
+@router.put("/announcements/{announcement_id}", response_model=Response)
+def update_announcement(
+    announcement_id: int,
+    data: AnnouncementUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    row = content_service.update_announcement(db, current_user, announcement_id, data)
+    return Response.success(message="公告已更新", data={"id": row.id})
+
+
+@router.delete("/announcements/{announcement_id}", response_model=Response)
+def delete_announcement(
+    announcement_id: int,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    content_service.delete_announcement(db, current_user, announcement_id)
+    return Response.success(message="公告已删除")
+
+
+@router.get("/announcements/{announcement_id}/reads", response_model=Response)
+def announcement_reads(
+    announcement_id: int,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=content_service.read_stats(db, announcement_id))
+
+
+@router.get("/feedbacks", response_model=Response)
+def list_feedback(
+    status: str | None = Query(default=None),
+    keyword: str | None = Query(default=None, max_length=50),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        data=content_service.list_feedback(
+            db, status=status, keyword=keyword, page=page, page_size=page_size
+        )
+    )
+
+
+@router.put("/feedbacks/{feedback_id}", response_model=Response)
+def reply_feedback(
+    feedback_id: int,
+    data: FeedbackReply,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    row = content_service.reply_feedback(db, current_user, feedback_id, data)
+    return Response.success(message="反馈已更新", data={"id": row.id, "status": row.status})
 
 
 @router.get("/kennels/occupancy", response_model=Response)

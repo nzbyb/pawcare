@@ -67,6 +67,18 @@ const router = createRouter({
           meta: { title: '个人中心' },
         },
         {
+          path: 'announcements',
+          name: 'announcements',
+          component: () => import('@/views/AnnouncementsView.vue'),
+          meta: { title: '公告' },
+        },
+        {
+          path: 'help',
+          name: 'help',
+          component: () => import('@/views/HelpView.vue'),
+          meta: { title: '帮助与反馈' },
+        },
+        {
           path: 'admin',
           name: 'admin',
           component: () => import('@/views/AdminView.vue'),

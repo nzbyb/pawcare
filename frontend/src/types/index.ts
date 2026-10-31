@@ -437,3 +437,64 @@ export interface KnowledgePage {
   page_size: number
 }
 
+
+export type AnnouncementCategory = 'notice' | 'policy' | 'activity'
+export type AnnouncementAudience = 'all' | 'pet_owner' | 'boarding_staff' | 'admin'
+export type AnnouncementStatus = 'draft' | 'published' | 'archived'
+
+export interface AnnouncementItem {
+  id: number
+  title: string
+  category: AnnouncementCategory
+  audience: AnnouncementAudience
+  is_pinned: boolean
+  attachment_url?: string | null
+  publish_at?: string | null
+  expire_at?: string | null
+  create_time?: string | null
+  is_read: boolean
+  read_count?: number | null
+}
+
+export interface AnnouncementDetail extends AnnouncementItem {
+  content: string
+  status: AnnouncementStatus
+}
+
+export interface AnnouncementReadStats {
+  announcement_id: number
+  target: number
+  read: number
+  unread: number
+  readers: {
+    user_id: number
+    username: string
+    nickname?: string | null
+    role: UserRole
+    read_at: string
+  }[]
+}
+
+export type FeedbackCategory = 'bug' | 'suggestion' | 'service' | 'other'
+export type FeedbackStatus = 'pending' | 'processing' | 'resolved' | 'closed'
+
+export interface Feedback {
+  id: number
+  user_id: number
+  category: FeedbackCategory
+  content: string
+  contact?: string | null
+  status: FeedbackStatus
+  reply?: string | null
+  replied_at?: string | null
+  create_time?: string | null
+  username?: string | null
+  nickname?: string | null
+}
+
+export interface FeedbackPage {
+  items: Feedback[]
+  total: number
+  page: number
+  page_size: number
+}

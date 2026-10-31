@@ -7,6 +7,7 @@ from app.models.boarding import (
     Kennel,
     MedicationLog,
 )
+from app.models.content import Announcement, AnnouncementRead, Feedback
 from app.models.health import HealthRecord
 from app.models.knowledge import KnowledgeChunk
 from app.models.mcp import MCPAuditLog
@@ -21,11 +22,14 @@ __all__ = [
     "AgentConversation",
     "AgentMessage",
     "AgentToolCall",
+    "Announcement",
+    "AnnouncementRead",
     "AuditLog",
     "Attachment",
     "BoardingDailyReport",
     "BoardingDraft",
     "BoardingOrder",
+    "Feedback",
     "HealthRecord",
     "Kennel",
     "KnowledgeChunk",

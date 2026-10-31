@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { NButton, NSelect, NSpin } from 'naive-ui'
+import { NButton, NSelect, NSpin, useMessage } from 'naive-ui'
 import { request } from '@/api/http'
 
 interface Statistics {
@@ -16,10 +16,12 @@ interface Statistics {
   daily: { date: string; orders: number; received: number; refunded: number; net: number }[]
 }
 
+const message = useMessage()
 const days = ref(7)
 const data = ref<Statistics | null>(null)
 const loading = ref(false)
 const failed = ref(false)
+const exporting = ref(false)
 let requestId = 0
 const maxOrders = computed(() => Math.max(1, ...data.value?.daily.map(row => row.orders) ?? []))
 const money = (amount: number) => `¥${amount.toFixed(2)}`
@@ -33,6 +35,29 @@ async function load(): Promise<void> {
   } catch { if (current === requestId) failed.value = true }
   finally { if (current === requestId) loading.value = false }
 }
+
+async function exportReport(): Promise<void> {
+  exporting.value = true
+  try {
+    const blob = await request.get<Blob>('/admin/statistics/export', {
+      params: { days: days.value },
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `pawcare-statistics-${data.value?.end_date ?? ''}-${days.value}d.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    message.success('报表已导出')
+  } catch {
+    message.error('导出失败，请稍后重试')
+  } finally {
+    exporting.value = false
+  }
+}
 onMounted(load)
 </script>
 
@@ -40,7 +65,10 @@ onMounted(load)
   <section class="statistics soft-card">
     <header>
       <div><h2 class="section-title">运营趋势</h2><p class="muted">{{ data?.start_date }} → {{ data?.end_date }} · 按支付和退款实际完成日统计</p></div>
-      <n-select v-model:value="days" :options="[{ label: '最近7天', value: 7 }, { label: '最近30天', value: 30 }]" style="width: 130px" @update:value="load" />
+      <div class="head-actions">
+        <n-select v-model:value="days" :options="[{ label: '最近7天', value: 7 }, { label: '最近30天', value: 30 }]" style="width: 130px" @update:value="load" />
+        <n-button size="small" :loading="exporting" @click="exportReport">导出 Excel</n-button>
+      </div>
     </header>
     <n-spin :show="loading">
       <div v-if="failed" role="alert">统计加载失败 <n-button size="small" @click="load">重试</n-button></div>
@@ -74,6 +102,7 @@ onMounted(load)
 <style scoped>
 .statistics { padding: 20px; margin: 12px 0 28px; }
 header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 p, summary { font-size: 12px; line-height: 1.7; }
 summary { cursor: pointer; color: var(--pc-primary); }
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }

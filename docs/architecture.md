@@ -314,6 +314,40 @@ Agent runtime ──────┤
 LangGraph 适配层通过参数拿到同一个注册表，评测变体对 `TOOL_DEFINITIONS` 的
 monkeypatch 仍然生效。
 
+### 5.12 门户内容与报表
+
+运营侧新增的三张表和一组接口，写入路径全部经过服务层，并写 `audit_logs`：
+
+| 表 | 关键字段 | 说明 |
+|---|---|---|
+| `announcements` | `category` / `audience` / `status` / `is_pinned` / `publish_at` / `expire_at` | 公告正文与投递范围 |
+| `announcement_reads` | `announcement_id` + `user_id` 唯一 | 已读按用户去重，重复打开不重复计数 |
+| `feedbacks` | `category` / `content` / `status` / `reply` | 意见反馈与管理员回复 |
+
+- **可见性**：`_visible()` 只放行 `status=published`、`publish_at <= now`、未过
+  `expire_at` 的公告；非管理员再按 `audience in ('all', role)` 过滤。草稿与已归档
+  公告只出现在管理端列表。
+- **状态流转**：公告发布时补 `publish_at`，回到草稿或归档时清空；已发布公告不能
+  直接删除（409），需先归档，避免已读记录随公告静默消失。
+- **反馈闭环**：提交后给管理员发站内通知（`dedupe_key` 去重）；管理员回复可同时
+  推进状态，状态只能向前，退回 `pending` 返回 409；回复后通知提交人，链接到
+  `/help`。
+- **报表导出**：`GET /api/admin/statistics/export?days=7|30` 复用
+  `admin_service.statistics` 的口径，用 openpyxl 在内存生成三张工作表（汇总 /
+  每日明细 / 同期订单），以附件流返回，不落临时文件；接口仅管理员可用。
+
+| 接口 | 权限 | 用途 |
+|---|---|---|
+| `GET /api/announcements` | 登录 | 按角色过滤的公告列表 |
+| `GET /api/announcements/unread-count` | 登录 | 导航未读角标 |
+| `GET /api/announcements/{id}` | 登录 | 详情，`mark_read=true` 时写入已读 |
+| `POST /api/announcements/read-all` | 登录 | 一键标记全部已读 |
+| `POST /api/feedback`、`GET /api/feedback` | 登录 | 提交反馈、查看自己的反馈 |
+| `GET/POST /api/admin/announcements`、`PUT/DELETE /api/admin/announcements/{id}` | 管理员 | 公告管理 |
+| `GET /api/admin/announcements/{id}/reads` | 管理员 | 可推送人数 / 已读 / 未读 / 读者列表 |
+| `GET /api/admin/feedbacks`、`PUT /api/admin/feedbacks/{id}` | 管理员 | 反馈列表与回复 |
+| `GET /api/admin/statistics`、`/statistics/export` | 管理员 | 运营统计与 Excel 导出 |
+
 ## 6. 调度引擎选型
 
 ### 6.1 主实现：显式工具调用循环

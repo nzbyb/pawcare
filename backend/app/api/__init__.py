@@ -5,6 +5,7 @@ from app.api import (
     agent,
     auth,
     boarding,
+    content,
     health,
     notifications,
     payment,
@@ -19,6 +20,7 @@ api.include_router(health.router)
 api.include_router(boarding.router)
 api.include_router(payment.router)
 api.include_router(notifications.router)
+api.include_router(content.router)
 api.include_router(uploads.router)
 api.include_router(agent.router)
 api.include_router(admin.router)

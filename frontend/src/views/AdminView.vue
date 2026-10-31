@@ -17,6 +17,8 @@ import {
 } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
+import AdminAnnouncements from '@/components/AdminAnnouncements.vue'
+import AdminFeedback from '@/components/AdminFeedback.vue'
 import AdminStatistics from '@/components/AdminStatistics.vue'
 import {
   getAdminOverview,
@@ -37,7 +39,14 @@ import type {
   UserRole,
 } from '@/types'
 
-type TabName = 'overview' | 'users' | 'kennels' | 'audit' | 'knowledge'
+type TabName =
+  | 'overview'
+  | 'users'
+  | 'kennels'
+  | 'audit'
+  | 'knowledge'
+  | 'announcements'
+  | 'feedback'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -889,6 +898,14 @@ onMounted(() => {
             @update:page="changeKnowledgePage"
           />
         </div>
+      </n-tab-pane>
+
+      <n-tab-pane name="announcements" tab="公告">
+        <AdminAnnouncements />
+      </n-tab-pane>
+
+      <n-tab-pane name="feedback" tab="意见反馈">
+        <AdminFeedback />
       </n-tab-pane>
     </n-tabs>
   </div>

@@ -17,7 +17,11 @@ const navItems = [
   { key: 'pets', label: '宠物档案', short: '宠物', icon: 'paw', to: '/pets', match: ['pets', 'pet-detail'] },
   { key: 'boarding', label: '寄养预约', short: '寄养', icon: 'calendar', to: '/boarding', match: ['boarding'] },
   { key: 'agent', label: '智能助手', short: '助手', icon: 'chat', to: '/agent', match: ['agent'] },
+  { key: 'announcements', label: '公告', short: '公告', icon: 'bell', to: '/announcements', match: ['announcements'] },
 ]
+
+// 手机端导航只有一条窄栏，公告与帮助从右上角账户菜单进入，避免链接溢出。
+const mobileNavItems = navItems.filter((item) => item.key !== 'announcements')
 
 const accountItem = {
   key: 'profile',
@@ -26,6 +30,14 @@ const accountItem = {
   icon: 'user',
   to: '/profile',
   match: ['profile'],
+}
+
+const helpItem = {
+  key: 'help',
+  label: '帮助与反馈',
+  icon: 'book',
+  to: '/help',
+  match: ['help'],
 }
 
 const adminItem = {
@@ -59,6 +71,8 @@ const todayText = computed(() =>
 )
 
 const userOptions = computed(() => [
+  { label: '公告', key: 'announcements' },
+  { label: '帮助与反馈', key: 'help' },
   { label: '个人中心', key: 'profile' },
   ...(isAdmin.value ? [{ label: '管理控制台', key: 'admin' }] : []),
   { label: '退出登录', key: 'logout' },
@@ -71,6 +85,14 @@ function isActive(item: { match: string[] }): boolean {
 function onUserSelect(key: string | number): void {
   if (key === 'admin' && isAdmin.value) {
     router.push('/admin')
+    return
+  }
+  if (key === 'announcements') {
+    router.push('/announcements')
+    return
+  }
+  if (key === 'help') {
+    router.push(helpItem.to)
     return
   }
   if (key === 'profile') {
@@ -114,6 +136,14 @@ function onUserSelect(key: string | number): void {
         >
           <AppIcon :name="accountItem.icon" :size="16" />
           <span>{{ accountItem.label }}</span>
+        </router-link>
+        <router-link
+          :to="helpItem.to"
+          class="nav-item"
+          :class="{ active: isActive(helpItem) }"
+        >
+          <AppIcon :name="helpItem.icon" :size="16" />
+          <span>{{ helpItem.label }}</span>
         </router-link>
       </nav>
 
@@ -175,7 +205,7 @@ function onUserSelect(key: string | number): void {
         </router-link>
         <nav class="mobile-nav">
           <router-link
-            v-for="item in navItems"
+            v-for="item in mobileNavItems"
             :key="item.key"
             :to="item.to"
             :class="{ active: isActive(item) }"
