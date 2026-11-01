@@ -195,6 +195,14 @@ cd backend
 
 迁移文件位于 [backend/migrations/](backend/migrations/)。MySQL 不支持 PostgreSQL 的 `EXCLUDE` 排他约束，同一笼舍的档期冲突由应用层在确认事务中校验。SQLite 仅用于 pytest（`tests/conftest.py` 自动创建临时库），不参与日常开发。
 
+表结构只由 Alembic 维护。如果升级时报 `Table 'xxx' already exists`，说明库里已经有表但没有对应的版本记录（早期版本会用 `create_all` 兜底建表），先确认表结构与迁移一致，再把版本号对齐后继续：
+
+```bash
+.venv\Scripts\python.exe -m alembic current
+.venv\Scripts\python.exe -m alembic stamp <该迁移的 revision>
+.venv\Scripts\python.exe -m alembic upgrade head
+```
+
 生成可重复执行的演示数据：
 
 ```bash

@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import models  # noqa: F401  # 注册全部模型
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal, engine
 from app.models.boarding import (
     BoardingDailyReport,
     BoardingOrder,
@@ -413,8 +413,22 @@ def seed_knowledge(db) -> int:
     return created
 
 
+def ensure_schema() -> None:
+    """表结构只由 Alembic 维护。
+
+    以前这里用 `Base.metadata.create_all()` 兜底，会在不写版本号的情况下把表建出来，
+    之后 `alembic upgrade head` 就会撞上 "table already exists"。所以改成只做检查。
+    """
+    with engine.connect() as conn:
+        existed = set(conn.dialect.get_table_names(conn))
+    if "users" not in existed:
+        raise SystemExit("数据库尚未初始化，请先执行：python -m alembic upgrade head")
+    if "alembic_version" not in existed:
+        raise SystemExit("缺少 alembic_version 表，请先执行：python -m alembic upgrade head")
+
+
 def main() -> None:
-    Base.metadata.create_all(bind=engine)
+    ensure_schema()
     db = SessionLocal()
     try:
         knowledge_count = seed_knowledge(db)
