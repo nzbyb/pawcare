@@ -19,6 +19,7 @@ from app.schemas.user import (
     UserResponse,
 )
 from app.services import auth_service, verification_service
+from app.utils.request import client_ip, user_agent
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -55,7 +56,12 @@ def reset_password(
 @router.post("/login", response_model=Response)
 @limiter.limit("10/minute")
 def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
-    result = auth_service.login(db, data)
+    result = auth_service.login(
+        db,
+        data,
+        ip=client_ip(request),
+        agent=user_agent(request),
+    )
     return Response.success(message="登录成功", data=result.model_dump())
 
 

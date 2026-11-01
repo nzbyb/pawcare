@@ -19,6 +19,7 @@ from app.models.payment import PaymentOrder
 from app.models.refund import RefundOrder
 from app.models.pet import Pet
 from app.models.reminder import Reminder
+from app.models.system import LoginLog
 from app.models.user import User
 from app.services.boarding_service import ACTIVE_ORDER_STATUSES
 
@@ -491,6 +492,52 @@ def list_audit_logs(
         "page": page,
         "page_size": page_size,
     }
+
+
+def list_login_logs(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    success: bool | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """登录日志：只读，按时间倒序；失败记录同样保留。"""
+    page, page_size = _pagination(page, page_size)
+
+    query = db.query(LoginLog, User).outerjoin(User, LoginLog.user_id == User.id)
+    if keyword and keyword.strip():
+        like = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(LoginLog.username.like(like), LoginLog.ip.like(like))
+        )
+    if success is not None:
+        query = query.filter(LoginLog.success == success)
+
+    total = query.count()
+    rows = (
+        query.order_by(LoginLog.create_time.desc(), LoginLog.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items = [
+        {
+            "id": log.id,
+            "user_id": log.user_id,
+            "username": log.username,
+            "nickname": (user.nickname or user.username) if user else None,
+            "role": user.role if user else None,
+            "success": log.success,
+            "reason": log.reason,
+            "ip": log.ip,
+            "user_agent": log.user_agent,
+            "create_time": log.create_time,
+        }
+        for log, user in rows
+    ]
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 def list_mcp_audit(

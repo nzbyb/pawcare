@@ -10,7 +10,13 @@ from app.dependencies.auth import get_current_admin
 from app.models.user import User
 from app.schemas.admin import UserStatusUpdate
 from app.schemas.content import AnnouncementCreate, AnnouncementUpdate, FeedbackReply
-from app.services import admin_service, content_service, export_service
+from app.schemas.system import SettingUpdateRequest
+from app.services import (
+    admin_service,
+    content_service,
+    export_service,
+    setting_service,
+)
 
 router = APIRouter(prefix="/admin", tags=["管理端"])
 
@@ -226,5 +232,45 @@ def list_audit_logs(
     return Response.success(
         data=admin_service.list_audit_logs(
             db, action=action, page=page, page_size=page_size
+        )
+    )
+
+
+@router.get("/settings", response_model=Response)
+def list_settings(
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=setting_service.list_settings(db))
+
+
+@router.put("/settings", response_model=Response)
+def update_settings(
+    data: SettingUpdateRequest,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        message="设置已保存",
+        data=setting_service.update_settings(db, current_user, data.items),
+    )
+
+
+@router.get("/login-logs", response_model=Response)
+def list_login_logs(
+    keyword: str | None = Query(default=None, max_length=50),
+    success: bool | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        data=admin_service.list_login_logs(
+            db,
+            keyword=keyword,
+            success=success,
+            page=page,
+            page_size=page_size,
         )
     )

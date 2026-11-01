@@ -12,10 +12,12 @@ import {
 } from 'naive-ui'
 
 import { listMyFeedback, submitFeedback } from '@/api/content'
-import type { Feedback } from '@/types'
+import { getPublicSettings } from '@/api/system'
+import type { Feedback, SystemSettings } from '@/types'
 
 const message = useMessage()
 const tab = ref<'faq' | 'guide' | 'feedback'>('faq')
+const settings = ref<SystemSettings | null>(null)
 
 const faqs = [
   {
@@ -122,7 +124,18 @@ function dateText(value?: string | null): string {
   return value ? value.slice(0, 16).replace('T', ' ') : ''
 }
 
-onMounted(loadFeedback)
+async function loadSettings(): Promise<void> {
+  try {
+    settings.value = await getPublicSettings()
+  } catch {
+    settings.value = null
+  }
+}
+
+onMounted(() => {
+  void loadFeedback()
+  void loadSettings()
+})
 </script>
 
 <template>
@@ -170,10 +183,33 @@ onMounted(loadFeedback)
             </div>
           </section>
 
+          <section v-if="settings?.booking_notice" class="soft-card guide">
+            <h2 class="section-title">预约须知</h2>
+            <p class="notice">{{ settings.booking_notice }}</p>
+          </section>
+
           <section class="soft-card guide">
             <h2 class="section-title">联系方式</h2>
-            <p class="muted">
-              门店电话与地址请以管理员在公告中发布的信息为准；系统问题可以通过「意见反馈」提交，
+            <dl class="contact">
+              <div>
+                <dt>门店</dt>
+                <dd>{{ settings?.store_name || '暂未设置' }}</dd>
+              </div>
+              <div>
+                <dt>电话</dt>
+                <dd>{{ settings?.service_phone || '暂未设置' }}</dd>
+              </div>
+              <div>
+                <dt>地址</dt>
+                <dd>{{ settings?.store_address || '暂未设置' }}</dd>
+              </div>
+              <div>
+                <dt>营业时间</dt>
+                <dd>{{ settings?.business_hours || '暂未设置' }}</dd>
+              </div>
+            </dl>
+            <p class="muted contact-note">
+              门店信息由管理员在「系统设置」中维护；系统问题可以通过「意见反馈」提交，
               处理进度会以站内通知回复。
             </p>
           </section>
@@ -258,6 +294,11 @@ onMounted(loadFeedback)
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--pc-line); vertical-align: top; }
 th { color: var(--pc-ink-soft); font-weight: 600; white-space: nowrap; }
+.notice { margin: 12px 0 0; font-size: 12.5px; line-height: 1.8; color: var(--pc-ink-soft); }
+.contact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; margin: 16px 0 0; }
+.contact dt { font-size: 11.5px; color: var(--pc-ink-soft); }
+.contact dd { margin: 3px 0 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.contact-note { margin-top: 16px; }
 .form-card { padding: 20px; display: grid; gap: 14px; }
 .field { display: grid; gap: 6px; }
 .field label { font-size: 12px; font-weight: 700; color: var(--pc-ink); }

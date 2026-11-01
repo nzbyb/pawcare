@@ -19,7 +19,7 @@ from app.schemas.user import (
     ProfileUpdate,
     UserResponse,
 )
-from app.services import verification_service
+from app.services import login_log_service, verification_service
 from app.utils.jwt import create_access_token
 from app.utils.password import hash_password, verify_password
 
@@ -76,13 +76,31 @@ def _record_login_failure(db: Session, user: User) -> None:
     db.commit()
 
 
-def login(db: Session, data: LoginRequest) -> LoginResponse:
+def login(
+    db: Session,
+    data: LoginRequest,
+    *,
+    ip: str | None = None,
+    agent: str | None = None,
+) -> LoginResponse:
     user = db.query(User).filter(User.username == data.username).first()
     now = datetime.now()
+
+    def log(success: bool, reason: str) -> None:
+        login_log_service.record(
+            db,
+            username=data.username,
+            user_id=user.id if user else None,
+            success=success,
+            reason=reason,
+            ip=ip,
+            agent=agent,
+        )
 
     if user:
         remaining = _lock_remaining_minutes(user, now)
         if remaining:
+            log(False, "locked")
             raise BusinessException(
                 message=f"账号已锁定，请 {remaining} 分钟后重试", code=429
             )
@@ -90,6 +108,7 @@ def login(db: Session, data: LoginRequest) -> LoginResponse:
     if not user or not verify_password(data.password, user.password_hash):
         if user:
             _record_login_failure(db, user)
+            log(False, "wrong_password")
             if user.locked_until and user.locked_until > now:
                 raise BusinessException(
                     message=(
@@ -98,8 +117,11 @@ def login(db: Session, data: LoginRequest) -> LoginResponse:
                     ),
                     code=429,
                 )
+        else:
+            log(False, "no_user")
         raise BusinessException(message="账号或密码错误")
     if user.status != 1:
+        log(False, "disabled")
         raise BusinessException(message="账号被禁用")
 
     if user.failed_login_count or user.locked_until:
@@ -107,6 +129,7 @@ def login(db: Session, data: LoginRequest) -> LoginResponse:
         user.locked_until = None
         db.commit()
 
+    log(True, "success")
     token = create_access_token(user.id, user.token_version or 0)
     return LoginResponse(token=token, user=UserResponse.model_validate(user))
 

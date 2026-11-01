@@ -1304,3 +1304,29 @@ HTTP 入口有限流和审计；这些边界用一套不依赖大模型的评测
 - 新增迁移 `f2b8c1d4e6a3`（`announcements` / `announcement_reads` / `feedbacks`），部署后需执行 `python -m alembic upgrade head`。
 - 前端新增 `/announcements`、`/help` 两个页面和管理端「公告」「意见反馈」两个页签，移动端这两项从右上角账户菜单进入。
 - 新增 9 条用例；完整 pytest 188 passed，`vue-tsc --noEmit` 与 Vite 生产构建通过。
+
+## 2026-11-01 — 站内搜索、系统设置与登录日志
+
+### 站内搜索
+
+- 新增 `GET /api/search?q=`，按宠物 / 订单 / 公告 / 护理知识分组返回，每组默认 5 条。
+- 宠物与订单按 `owner_id` 过滤：宠物主只能搜到自己的记录，寄养员与管理员可搜全部；订单支持按宠物名或笼舍编号命中，链接跳回 `?order=<id>` 定位。
+- 公告复用 `content_service.visible_ids()`，可见性与公告页一致，不绕过推送范围；护理知识仅管理员可搜。
+- 前端新增 `/search` 页面，顶栏加入搜索框，手机端从账户菜单进入；公告搜索结果可直接展开对应条目（`/announcements?id=`）。
+
+### 系统设置
+
+- 新增 `system_settings` 键值表，固定五个键：门店名称、客服电话、门店地址、营业时间、预约须知；缺省回落到代码默认值。
+- 管理端 `GET/PUT /api/admin/settings` 整体保存，只写变化的键，并记一条 `setting.update` 审计。
+- 帮助与反馈的「服务指南」改为读取 `GET /api/settings`，联系方式与预约须知由管理员维护。
+
+### 登录日志
+
+- 新增 `login_logs` 表，记录每次登录尝试：账号、用户 ID、结果、原因（成功 / 密码错误 / 账号不存在 / 锁定 / 禁用）、IP、UA。
+- 客户端 IP 优先取 `X-Forwarded-For` 首段，日志写入失败不影响登录。
+- 管理端新增「登录日志」页签，支持按账号 / IP 与结果筛选。
+
+### 迁移与验证
+
+- 新迁移 `c7e2a4d9b1f6`（`system_settings` / `login_logs`），部署后入口脚本会自动执行。
+- 新增 4 条用例；完整 pytest 192 passed，`vue-tsc --noEmit` 与 Vite 生产构建通过。

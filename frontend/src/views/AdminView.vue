@@ -19,6 +19,8 @@ import {
 import AppIcon from '@/components/AppIcon.vue'
 import AdminAnnouncements from '@/components/AdminAnnouncements.vue'
 import AdminFeedback from '@/components/AdminFeedback.vue'
+import AdminLoginLogs from '@/components/AdminLoginLogs.vue'
+import AdminSettings from '@/components/AdminSettings.vue'
 import AdminStatistics from '@/components/AdminStatistics.vue'
 import {
   getAdminOverview,
@@ -47,6 +49,8 @@ type TabName =
   | 'knowledge'
   | 'announcements'
   | 'feedback'
+  | 'settings'
+  | 'loginLogs'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -906,6 +910,14 @@ onMounted(() => {
 
       <n-tab-pane name="feedback" tab="意见反馈">
         <AdminFeedback />
+      </n-tab-pane>
+
+      <n-tab-pane name="settings" tab="系统设置">
+        <AdminSettings />
+      </n-tab-pane>
+
+      <n-tab-pane name="loginLogs" tab="登录日志">
+        <AdminLoginLogs />
       </n-tab-pane>
     </n-tabs>
   </div>

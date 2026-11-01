@@ -43,6 +43,11 @@ def _visible(db: Session, user: User) -> list[int]:
     return [row[0] for row in query.all()]
 
 
+def visible_ids(db: Session, user: User) -> list[int]:
+    """当前用户可见的已发布公告 ID（供搜索等服务复用）。"""
+    return _visible(db, user)
+
+
 def _read_ids(db: Session, user: User, ids: list[int]) -> set[int]:
     if not ids:
         return set()

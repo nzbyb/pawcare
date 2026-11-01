@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDropdown } from 'naive-ui'
 
@@ -71,12 +71,22 @@ const todayText = computed(() =>
 )
 
 const userOptions = computed(() => [
+  { label: '站内搜索', key: 'search' },
   { label: '公告', key: 'announcements' },
   { label: '帮助与反馈', key: 'help' },
   { label: '个人中心', key: 'profile' },
   ...(isAdmin.value ? [{ label: '管理控制台', key: 'admin' }] : []),
   { label: '退出登录', key: 'logout' },
 ])
+
+const searchText = ref('')
+
+function goSearch(): void {
+  const q = searchText.value.trim()
+  if (!q) return
+  router.push({ name: 'search', query: { q } })
+  searchText.value = ''
+}
 
 function isActive(item: { match: string[] }): boolean {
   return item.match.includes(String(route.name))
@@ -85,6 +95,10 @@ function isActive(item: { match: string[] }): boolean {
 function onUserSelect(key: string | number): void {
   if (key === 'admin' && isAdmin.value) {
     router.push('/admin')
+    return
+  }
+  if (key === 'search') {
+    router.push('/search')
     return
   }
   if (key === 'announcements') {
@@ -191,6 +205,16 @@ function onUserSelect(key: string | number): void {
         </div>
         <div class="topbar-actions">
           <span class="topbar-date">{{ todayText }}</span>
+          <form class="topbar-search" role="search" @submit.prevent="goSearch">
+            <AppIcon name="search" :size="14" />
+            <input
+              v-model="searchText"
+              maxlength="50"
+              type="search"
+              placeholder="搜索宠物、订单、公告"
+              aria-label="站内搜索"
+            />
+          </form>
           <NotificationBell />
           <button class="assistant-button" type="button" @click="router.push('/agent')">
             <AppIcon name="chat" :size="15" />
@@ -421,6 +445,36 @@ function onUserSelect(key: string | number): void {
 .topbar-date {
   color: var(--pc-ink-faint);
   font-size: 12px;
+}
+
+.topbar-search {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--pc-line-strong);
+  border-radius: var(--pc-radius-sm);
+  background: var(--pc-surface);
+  color: var(--pc-ink-faint);
+}
+
+.topbar-search:focus-within {
+  border-color: var(--pc-primary);
+  color: var(--pc-primary);
+}
+
+.topbar-search input {
+  width: 168px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--pc-ink);
+  font-size: 12.5px;
+}
+
+.topbar-search input::placeholder {
+  color: var(--pc-ink-faint);
 }
 
 .assistant-button {

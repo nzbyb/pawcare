@@ -348,6 +348,36 @@ monkeypatch 仍然生效。
 | `GET /api/admin/feedbacks`、`PUT /api/admin/feedbacks/{id}` | 管理员 | 反馈列表与回复 |
 | `GET /api/admin/statistics`、`/statistics/export` | 管理员 | 运营统计与 Excel 导出 |
 
+### 5.13 搜索、系统设置与登录日志
+
+**站内搜索** `GET /api/search?q=`：一次查询按「宠物 / 订单 / 公告 / 护理知识」分组，
+每组最多返回 `limit` 条（默认 5、上限 10），不提供跨分组分页，避免退化成第二套列表页。
+
+- 宠物与订单：宠物主只能命中 `owner_id` 为自己的记录，寄养员与管理员可命中全部；
+  订单按宠物名或笼舍编号匹配，结果链接回 `?order=<id>` 的精确定位。
+- 公告：复用 `content_service.visible_ids()`，与公告页的可见性完全一致（状态、
+  上下线时间、推送对象三重过滤），搜索结果不会绕过权限。
+- 护理知识：属于管理端只读内容，仅管理员分组返回；其他角色通过智能助手提问。
+- 关键词只做去空白与截断（50 字），不解析语法，也不返回总数之外的聚合信息。
+
+**系统设置** `system_settings` 键值表：`store_name` / `service_phone` /
+`store_address` / `business_hours` / `booking_notice` 五个固定键。
+
+- 键必须与 `schemas.system.SettingKey` 一致，取值缺省回落代码里的默认值，
+  因此新环境不建数据也能正常展示。
+- 管理端 `PUT /api/admin/settings` 整体保存，只写入真正变化的键，并写一条
+  `setting.update` 审计记录（before / after 以键值字典形式保存）。
+- `GET /api/settings` 登录后可读，帮助与反馈页的服务指南直接用它渲染门店信息。
+
+**登录日志** `login_logs` 表：每次登录尝试一条记录，`reason` 取
+`success / wrong_password / no_user / locked / disabled`。
+
+- 写入在 `auth_service.login` 内完成，登录失败分支先更新失败计数，再落日志；
+  日志写入失败只回滚自身，不影响登录结果。
+- 客户端 IP 优先取 `X-Forwarded-For` 首段（Nginx 反代），UA 截断到 255 字符。
+- `GET /api/admin/login-logs` 支持按账号 / IP 与结果筛选，只读；与业务审计日志
+  `audit_logs` 分离，后者只记录通过鉴权后的写操作。
+
 ## 6. 调度引擎选型
 
 ### 6.1 主实现：显式工具调用循环

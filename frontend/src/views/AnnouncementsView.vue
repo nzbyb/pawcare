@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { NButton, NEmpty, NSpin, useMessage } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
@@ -11,6 +12,7 @@ import {
 import type { AnnouncementDetail, AnnouncementItem } from '@/types'
 
 const message = useMessage()
+const route = useRoute()
 const items = ref<AnnouncementItem[]>([])
 const unread = ref(0)
 const loading = ref(true)
@@ -87,7 +89,13 @@ async function markAll(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // 站内搜索会带 ?id= 直接定位某条公告。
+  const target = Number(route.query.id)
+  const item = target ? items.value.find((row) => row.id === target) : undefined
+  if (item) await toggle(item)
+})
 </script>
 
 <template>

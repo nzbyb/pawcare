@@ -10,6 +10,8 @@ from app.api import (
     notifications,
     payment,
     pets,
+    search,
+    settings,
     uploads,
 )
 
@@ -21,6 +23,8 @@ api.include_router(boarding.router)
 api.include_router(payment.router)
 api.include_router(notifications.router)
 api.include_router(content.router)
+api.include_router(search.router)
+api.include_router(settings.router)
 api.include_router(uploads.router)
 api.include_router(agent.router)
 api.include_router(admin.router)

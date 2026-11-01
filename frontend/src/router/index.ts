@@ -73,6 +73,12 @@ const router = createRouter({
           meta: { title: '公告' },
         },
         {
+          path: 'search',
+          name: 'search',
+          component: () => import('@/views/SearchView.vue'),
+          meta: { title: '站内搜索' },
+        },
+        {
           path: 'help',
           name: 'help',
           component: () => import('@/views/HelpView.vue'),

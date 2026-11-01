@@ -498,3 +498,67 @@ export interface FeedbackPage {
   page: number
   page_size: number
 }
+
+export interface SystemSettings {
+  store_name: string
+  service_phone: string
+  store_address: string
+  business_hours: string
+  booking_notice: string
+}
+
+export interface SystemSettingItem {
+  key: keyof SystemSettings
+  value: string
+  description?: string | null
+  update_time?: string | null
+}
+
+export type LoginFailureReason =
+  | 'success'
+  | 'wrong_password'
+  | 'no_user'
+  | 'locked'
+  | 'disabled'
+
+export interface LoginLog {
+  id: number
+  user_id?: number | null
+  username: string
+  nickname?: string | null
+  role?: UserRole | null
+  success: boolean
+  reason: LoginFailureReason
+  ip?: string | null
+  user_agent?: string | null
+  create_time?: string | null
+}
+
+export interface LoginLogPage {
+  items: LoginLog[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type SearchType = 'pet' | 'order' | 'announcement' | 'knowledge'
+
+export interface SearchItem {
+  type: SearchType
+  id: number
+  title: string
+  subtitle?: string | null
+  url: string
+}
+
+export interface SearchGroup {
+  type: SearchType
+  label: string
+  items: SearchItem[]
+}
+
+export interface SearchResult {
+  keyword: string
+  total: number
+  groups: SearchGroup[]
+}

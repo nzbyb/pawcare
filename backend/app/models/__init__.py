@@ -15,6 +15,7 @@ from app.models.pet import Attachment, Pet, WeightRecord
 from app.models.payment import PaymentOrder
 from app.models.refund import RefundOrder
 from app.models.reminder import Notification, Reminder
+from app.models.system import LoginLog, SystemSetting
 from app.models.user import User
 from app.models.verification import VerificationCode
 
@@ -33,6 +34,7 @@ __all__ = [
     "HealthRecord",
     "Kennel",
     "KnowledgeChunk",
+    "LoginLog",
     "MCPAuditLog",
     "MedicationLog",
     "Notification",
@@ -40,6 +42,7 @@ __all__ = [
     "RefundOrder",
     "Pet",
     "Reminder",
+    "SystemSetting",
     "User",
     "VerificationCode",
     "WeightRecord",
