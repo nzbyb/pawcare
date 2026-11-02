@@ -255,27 +255,30 @@ onMounted(load)
 
         <section class="block">
           <h2>健康记录</h2>
-          <table v-if="sheet.health_records.length" class="sheet-table">
-            <thead>
-              <tr>
-                <th class="col-type">类型</th>
-                <th>项目</th>
-                <th class="col-date">日期</th>
-                <th class="col-date">下次到期</th>
-                <th class="col-note">备注</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(record, index) in sheet.health_records" :key="index">
-                <td>{{ recordTypeText(record.record_type) }}</td>
-                <td>{{ record.title }}</td>
-                <td>{{ record.record_date }}</td>
-                <td>{{ record.next_due_date ?? '—' }}</td>
-                <td class="note-cell">{{ record.note ?? '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-else class="empty">暂无健康记录。</p>
+          <!-- 窄屏下五列挤不下，表格内部横向滑动，不压缩到每格两三个字 -->
+          <div class="table-scroll">
+            <table v-if="sheet.health_records.length" class="sheet-table">
+              <thead>
+                <tr>
+                  <th class="col-type">类型</th>
+                  <th>项目</th>
+                  <th class="col-date">日期</th>
+                  <th class="col-date">下次到期</th>
+                  <th class="col-note">备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(record, index) in sheet.health_records" :key="index">
+                  <td>{{ recordTypeText(record.record_type) }}</td>
+                  <td>{{ record.title }}</td>
+                  <td>{{ record.record_date }}</td>
+                  <td>{{ record.next_due_date ?? '—' }}</td>
+                  <td class="note-cell">{{ record.note ?? '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-if="!sheet.health_records.length" class="empty">暂无健康记录。</p>
         </section>
 
         <section v-if="sheet.reminders.length" class="block">
@@ -566,6 +569,11 @@ onMounted(load)
   color: var(--pc-ink-faint);
 }
 
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .sheet-table {
   width: 100%;
   border-collapse: collapse;
@@ -710,6 +718,11 @@ onMounted(load)
     padding: 18px 16px;
   }
 
+  /* 五列健康记录在手机上留最小可读宽度，超出部分靠外层滑动 */
+  .sheet-table {
+    min-width: 520px;
+  }
+
   .sheet-grid {
     grid-template-columns: 1fr;
   }
@@ -764,6 +777,15 @@ onMounted(load)
   .block,
   .sign-grid {
     break-inside: avoid;
+  }
+
+  /* 打印时恢复满宽，不需要在纸面上再横向滑动 */
+  .table-scroll {
+    overflow: visible;
+  }
+
+  .sheet-table {
+    min-width: 0;
   }
 
   @page {

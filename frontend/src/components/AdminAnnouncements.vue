@@ -337,11 +337,13 @@ onMounted(load)
     </div>
 
     <n-spin :show="loading">
+      <!-- scroll-x：列宽合计 830px，窄屏时表格内部横向滚动 -->
       <n-data-table
         :columns="columns"
         :data="items"
         :row-key="(row: AnnouncementDetail) => row.id"
         :pagination="false"
+        :scroll-x="830"
         size="small"
       />
     </n-spin>
@@ -423,7 +425,13 @@ onMounted(load)
 </template>
 
 <style scoped>
-.admin-block { display: grid; gap: 16px; }
+.admin-block {
+  display: grid;
+  /* 表格 scroll-x 会撑出 830 的 min-content，不限住网格轨道的话整块会被撑宽，
+     标题和工具栏跟着跑到屏幕外，看起来就是"不能左右滑动"。 */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
 .block-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .pager { display: flex; justify-content: flex-end; }
