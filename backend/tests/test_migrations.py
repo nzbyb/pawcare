@@ -54,3 +54,43 @@ def test_migrations_upgrade_and_downgrade(tmp_path: Path) -> None:
     remaining = _tables(db_path)
     assert "users" not in remaining
     assert "boarding_orders" not in remaining
+
+
+def test_upgrade_backfills_knowledge_documents(tmp_path: Path) -> None:
+    """旧库只有切片表时，升级要把切片反推成文档，不能丢内容。"""
+    db_path = tmp_path / "migration.db"
+
+    before = _alembic(tmp_path, "upgrade", "c7e2a4d9b1f6")
+    assert before.returncode == 0, before.stderr
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO knowledge_chunks "
+            "(create_time, update_time, doc_id, chunk_index, title, content, embedding, meta) "
+            "VALUES (datetime('now'), datetime('now'), ?, 0, ?, ?, NULL, ?)",
+            (
+                "legacy-doc",
+                "旧版寄养指南",
+                "寄养前准备疫苗本。入住当天确认喂食习惯。",
+                '{"category": "boarding", "source": "旧知识库"}',
+            ),
+        )
+        conn.commit()
+
+    upgraded = _alembic(tmp_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT category, title, content, source, status, chunk_count "
+            "FROM knowledge_documents WHERE doc_id = 'legacy-doc'"
+        ).fetchone()
+
+    assert row is not None
+    category, title, content, source, status, chunk_count = row
+    assert category == "boarding"
+    assert title == "旧版寄养指南"
+    assert content == "寄养前准备疫苗本。入住当天确认喂食习惯。"
+    assert source == "旧知识库"
+    assert status == "published"
+    assert chunk_count == 1
