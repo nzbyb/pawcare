@@ -9,6 +9,10 @@ export function processRefund(refundId: number): Promise<RefundOrder> {
   return request.post(`/payments/refunds/${refundId}/process`)
 }
 import type {
+  AbnormalCaseItem,
+  AbnormalCasePage,
+  AbnormalCaseStatus,
+  AbnormalSeverity,
   BoardingHealthCheck,
   BoardingTasks,
   BoardingDraft,
@@ -107,4 +111,33 @@ export function createReport(
   },
 ): Promise<DailyReport> {
   return request.post<DailyReport>(`/boarding/orders/${orderId}/reports`, payload)
+}
+
+export function listAbnormalCases(params: {
+  status?: AbnormalCaseStatus
+  severity?: AbnormalSeverity
+  order_id?: number
+  page?: number
+  page_size?: number
+}): Promise<AbnormalCasePage> {
+  return request.get<AbnormalCasePage>('/boarding/abnormal-cases', { params })
+}
+
+export function getAbnormalCase(caseId: number): Promise<AbnormalCaseItem> {
+  return request.get<AbnormalCaseItem>(`/boarding/abnormal-cases/${caseId}`)
+}
+
+export function claimAbnormalCase(caseId: number): Promise<AbnormalCaseItem> {
+  return request.post<AbnormalCaseItem>(`/boarding/abnormal-cases/${caseId}/claim`)
+}
+
+export function resolveAbnormalCase(
+  caseId: number,
+  payload: { action_taken: string; vet_contacted?: boolean; notify_owner?: boolean },
+): Promise<AbnormalCaseItem> {
+  return request.post<AbnormalCaseItem>(`/boarding/abnormal-cases/${caseId}/resolve`, payload)
+}
+
+export function reopenAbnormalCase(caseId: number): Promise<AbnormalCaseItem> {
+  return request.post<AbnormalCaseItem>(`/boarding/abnormal-cases/${caseId}/reopen`)
 }

@@ -28,6 +28,7 @@ import {
   createDraft as createDraftApi,
   createReport,
   listDrafts,
+  listAbnormalCases,
   listOrders,
   listReports,
   getBoardingHealthCheck,
@@ -38,6 +39,7 @@ import { listPets } from '@/api/pets'
 import { uploadImage, validateImage } from '@/api/uploads'
 import { useAuthStore } from '@/stores/auth'
 import type {
+  AbnormalCaseItem,
   BoardingDraft,
   BoardingOrder,
   BoardingHealthCheck,
@@ -517,6 +519,7 @@ async function runOrderAction(
 const showReports = ref(false)
 const reportOrder = ref<BoardingOrder | null>(null)
 const reportList = ref<DailyReport[]>([])
+const reportCases = ref<AbnormalCaseItem[]>([])
 const reportsLoading = ref(false)
 const reportDate = ref<string | null>(null)
 const reportAppetite = ref('good')
@@ -546,14 +549,30 @@ async function openReports(order: BoardingOrder): Promise<void> {
   reportStool.value = 'normal'
   reportSpirit.value = 'good'
   reportList.value = []
+  reportCases.value = []
   reportsLoading.value = true
   try {
-    reportList.value = await listReports(order.id)
+    const [reports, cases] = await Promise.all([
+      listReports(order.id),
+      listAbnormalCases({ order_id: order.id, page_size: 50 }).catch(() => null),
+    ])
+    reportList.value = reports
+    reportCases.value = cases?.items ?? []
   } catch {
     reportList.value = []
   } finally {
     reportsLoading.value = false
   }
+}
+
+function caseForReport(reportId: number): AbnormalCaseItem | null {
+  return reportCases.value.find(item => item.report_id === reportId) ?? null
+}
+
+const caseStatusLabels: Record<string, string> = {
+  open: '待处置',
+  processing: '护理员处理中',
+  resolved: '异常已处理',
 }
 
 function reportDateDisabled(timestamp: number): boolean {
@@ -1023,6 +1042,22 @@ onBeforeUnmount(stopCountdown)
                 >
                   <img :src="photo" alt="寄养日报照片" loading="lazy" />
                 </a>
+              </div>
+              <div
+                v-if="caseForReport(report.id)"
+                class="report-case"
+                :class="[caseForReport(report.id)!.status, caseForReport(report.id)!.severity]"
+              >
+                <span class="report-case-status">
+                  {{ caseStatusLabels[caseForReport(report.id)!.status] }}
+                </span>
+                <span v-if="caseForReport(report.id)!.status === 'resolved'">
+                  {{ caseForReport(report.id)!.action_taken }}
+                  <em v-if="caseForReport(report.id)!.vet_contacted">已联系兽医</em>
+                </span>
+                <span v-else>
+                  {{ caseForReport(report.id)!.reason_labels.join('、') }}，护理员会尽快处置并告知结果。
+                </span>
               </div>
             </div>
           </article>
@@ -1596,6 +1631,40 @@ onBeforeUnmount(stopCountdown)
   color: var(--pc-ink);
   font-size: 12.5px;
   line-height: 1.65;
+}
+
+.report-case {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--pc-line);
+  border-left-width: 2px;
+  border-radius: var(--pc-radius-sm);
+  color: var(--pc-ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.report-case.critical {
+  border-left-color: var(--pc-danger);
+}
+
+.report-case.resolved {
+  border-left-color: var(--pc-primary);
+}
+
+.report-case-status {
+  font-weight: 600;
+  color: var(--pc-ink);
+}
+
+.report-case em {
+  margin-left: 6px;
+  font-style: normal;
+  color: var(--pc-primary);
 }
 
 .report-photos {

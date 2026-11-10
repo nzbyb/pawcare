@@ -204,6 +204,66 @@ export interface BoardingTaskItem {
   report_id: number | null
   report_date: string | null
   abnormal_reasons: string[]
+  case_id: number | null
+  case_status: AbnormalCaseStatus | null
+  severity: AbnormalSeverity | null
+  handler_name: string | null
+}
+
+export type AbnormalSeverity = 'warning' | 'critical'
+export type AbnormalCaseStatus = 'open' | 'processing' | 'resolved'
+
+export interface AbnormalReportSnapshot {
+  appetite: string | null
+  stool: string | null
+  spirit: string | null
+  note: string | null
+}
+
+export interface AbnormalCaseItem {
+  id: number
+  order_id: number
+  report_id: number
+  report_date: string | null
+  pet_id: number | null
+  pet_name: string | null
+  kennel_code: string | null
+  order_status: BoardingOrderStatus | null
+  owner_id: number | null
+  owner_name: string | null
+  severity: AbnormalSeverity
+  severity_label: string
+  reasons: string[]
+  reason_labels: string[]
+  status: AbnormalCaseStatus
+  handler_id: number | null
+  handler_name: string | null
+  claimed_at: string | null
+  resolved_at: string | null
+  resolved_by: number | null
+  resolver_name: string | null
+  action_taken: string | null
+  vet_contacted: boolean
+  owner_notified: boolean
+  report: AbnormalReportSnapshot
+  create_time: string | null
+}
+
+export interface AbnormalCaseStats {
+  open: number
+  critical_open: number
+  resolved_recent: number
+  avg_resolve_minutes: number | null
+}
+
+export interface AbnormalCasePage {
+  items: AbnormalCaseItem[]
+  total: number
+  page: number
+  page_size: number
+  counts: { open: number; processing: number; resolved: number; critical_open: number }
+  stats: AbnormalCaseStats | null
+  today: string
 }
 
 export type BoardingTasks = { date: string; counts: Record<BoardingTaskKey, number> }
