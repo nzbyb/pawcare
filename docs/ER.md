@@ -16,6 +16,8 @@ erDiagram
     KENNELS ||--o{ BOARDING_ORDERS : hosts
     KENNELS ||--o{ BOARDING_DRAFTS : reserves
     BOARDING_ORDERS ||--o{ BOARDING_DAILY_REPORTS : has
+    BOARDING_DAILY_REPORTS ||--o| BOARDING_ABNORMAL_CASES : triggers
+    BOARDING_ORDERS ||--o{ BOARDING_ABNORMAL_CASES : has
     BOARDING_ORDERS ||--o{ MEDICATION_LOGS : has
     AGENT_CONVERSATIONS ||--o{ AGENT_MESSAGES : has
     AGENT_CONVERSATIONS ||--o{ AGENT_TOOL_CALLS : traces
@@ -114,6 +116,22 @@ erDiagram
         text note
         json photos
         int created_by FK
+    }
+
+    BOARDING_ABNORMAL_CASES {
+        int id PK
+        int order_id FK
+        int report_id FK
+        string severity
+        json reasons
+        string status
+        int handler_id FK
+        datetime claimed_at
+        datetime resolved_at
+        text action_taken
+        bool vet_contacted
+        bool owner_notified
+        int resolved_by FK
     }
 
     MEDICATION_LOGS {
@@ -235,6 +253,8 @@ erDiagram
 - `boarding_orders` 同一 `kennel_id` 的日期区间不得重叠：MySQL 无 `EXCLUDE` 约束，由应用层档期校验在确认事务中完成，并用笼舍行锁（`SELECT … FOR UPDATE`）串行化并发确认。
 - 向量列 `knowledge_chunks.embedding` 以 JSON 文本（512 维）存储，检索在应用层计算余弦相似度。
 - `knowledge_documents.doc_id` 唯一，切片通过同名 `doc_id` 外键归属文档（级联删除）；文档归档后切片保留但不参与检索。
+- `boarding_abnormal_cases.report_id` 唯一：一条异常日报只生成一张处置单，状态
+  `open / processing / resolved` 单向推进，管理员可重新打开；认领人字段允许为空（直接处置时补填）。
 - `reminders.dedupe_key` 唯一，保证 APScheduler 重复扫描不会产生重复提醒。
 - `boarding_drafts.idempotency_key` 唯一，确认接口用它防重复下单。
 - 健康档案采用软删除（`deleted_at`），关键修改写 `audit_logs`。

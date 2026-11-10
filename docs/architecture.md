@@ -212,8 +212,8 @@ MySQL 没有 PostgreSQL 的排他约束，因此不再建库级约束。
 
 - 概览与知识库都是聚合读，不新增写路径；统计口径直接来自业务表，不做缓存，
   避免管理端数字与实际订单状态不一致。
-- 知识库只读：切片由 seed 与离线导入脚本写入，管理端不提供增删改，防止在演示中
-  把未审核的内容写进检索集合。
+- 知识库维护走文档层：编辑文档后切片自动重建，但向量要等检索或手动「重建索引」才生成；
+  归档的文档保留切片与向量，只是不再参与检索，删除前必须先归档。
 
 - `audit_logs` 由寄养、支付服务在业务事务内写入，管理端不补写、不修改。
 - 停用账号会递增 `token_version`，已登录会话立即失效；不能停用自己，也不能停用
@@ -385,6 +385,36 @@ monkeypatch 仍然生效。
 - 客户端 IP 优先取 `X-Forwarded-For` 首段（Nginx 反代），UA 截断到 255 字符。
 - `GET /api/admin/login-logs` 支持按账号 / IP 与结果筛选，只读；与业务审计日志
   `audit_logs` 分离，后者只记录通过鉴权后的写操作。
+
+### 5.14 异常日报处置闭环
+
+日报的食欲、排便、精神三项任意一项异常时，写日报的同一事务里生成一张处置单，
+把「发现—认领—处置—告知」做成可追踪的业务对象。
+
+| 接口 | 角色 | 说明 |
+|---|---|---|
+| `GET /api/boarding/abnormal-cases` | 登录 | 处置单分页；宠物主只能看到自己订单的单，寄养员与管理员看全部 |
+| `GET /api/boarding/abnormal-cases/{id}` | 登录 | 处置单详情，含日报快照与处置记录 |
+| `POST /api/boarding/abnormal-cases/{id}/claim` | 寄养员 / 管理员 | 认领：`open → processing`，同时只有一人负责 |
+| `POST /api/boarding/abnormal-cases/{id}/resolve` | 寄养员 / 管理员 | 处置完成：写措施、是否联系兽医、是否告知宠物主 |
+| `POST /api/boarding/abnormal-cases/{id}/reopen` | 管理员 | 处置有误或情况反复时撤回为待处置 |
+
+规则：
+
+- `boarding_abnormal_cases.report_id` 唯一，一条日报最多一张单；建单逻辑幂等，
+  重复调用不会产生第二张。
+- 严重度：出现腹泻或精神低落，或同时出现两项以上异常记为 `critical`，其余单项为
+  `warning`。紧急异常在**建单时**就通知宠物主（“护理员正在处理”），处置完成后再
+  告知结果，避免宠物主等到结果才知道出过问题。
+- 建单通知发给 `boarding_staff` 与 `admin`，排除刚填日报的人；处置结果通知走
+  `notification_service`，沿用用户的通知开关与 `dedupe_key` 去重。
+- 认领采用“先到先得”：已被人认领的单，别人认领会返回 409；管理员可兜底处置，
+  但普通寄养员必须先交接。
+- 处置单所有写操作写 `audit_logs`（`abnormal_case.create / claim / resolve / reopen`），
+  before / after 记录状态、认领人、措施与告知标记。
+- 今日任务接口 `GET /api/boarding/tasks/today` 的异常项附带 `case_id`、`case_status`
+  与认领人，寄养员在工作台就能直接处置，不必再去翻订单。
+- 宠物主在寄养日报弹窗里能看到每条异常日报的处置状态与措施，不额外增加页面。
 
 ## 6. 调度引擎选型
 
