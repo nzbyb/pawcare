@@ -3,10 +3,9 @@ from uuid import uuid4
 
 from app.agent.tools import TOOL_HANDLERS, ToolContext, execute_tool
 from app.models.boarding import BoardingOrder
-from app.models.knowledge import KnowledgeChunk
 from app.models.user import User
 from app.rag import retriever
-from tests.fakes import FakeEmbedder
+from tests.fakes import FakeEmbedder, add_knowledge
 from tests.test_pets import create_pet
 
 
@@ -195,16 +194,11 @@ def test_reports_tool_blocks_other_owner(
 
 
 def test_search_care_knowledge_tool(client, owner_headers, db, monkeypatch):
-    db.add(
-        KnowledgeChunk(
-            doc_id=f"tool-{uuid4().hex[:10]}",
-            chunk_index=0,
-            title="寄养准备测试",
-            content="测试甲：寄养前准备疫苗本和牵引绳。",
-            meta={"category": "boarding", "source": "测试知识库"},
-        )
+    add_knowledge(
+        db,
+        title="寄养准备测试",
+        content="测试甲：寄养前准备疫苗本和牵引绳。",
     )
-    db.commit()
     monkeypatch.setattr(retriever, "get_embedder", lambda: FakeEmbedder())
 
     owner = user_from_headers(client, owner_headers, db)

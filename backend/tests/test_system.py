@@ -3,10 +3,10 @@ from uuid import uuid4
 
 from app.models.audit import AuditLog
 from app.models.boarding import BoardingOrder, Kennel
-from app.models.knowledge import KnowledgeChunk
 from app.models.system import LoginLog
 from app.models.user import User
 from app.utils.password import hash_password
+from tests.fakes import add_knowledge
 
 
 def tag() -> str:
@@ -194,16 +194,12 @@ def test_search_groups_permissions_and_order_link(
     assert by_kennel["groups"][0]["items"][0]["id"] == order.id
 
     # 护理知识只对管理员开放。
-    db.add(
-        KnowledgeChunk(
-            doc_id=f"search-doc-{tag()}",
-            chunk_index=0,
-            title="疫苗注意事项",
-            content="疫苗前后一周避免洗澡，接种后观察 30 分钟。",
-            meta={"category": "健康"},
-        )
+    add_knowledge(
+        db,
+        title="疫苗注意事项",
+        content="疫苗前后一周避免洗澡，接种后观察 30 分钟。",
+        category="health",
     )
-    db.commit()
     admin_result = client.get(
         "/api/search", headers=admin_headers, params={"q": "疫苗"}
     ).json()["data"]

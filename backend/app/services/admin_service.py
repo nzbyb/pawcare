@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.common.exceptions import BusinessException
 from app.models.audit import AuditLog
 from app.models.boarding import BoardingOrder, Kennel
-from app.models.knowledge import KnowledgeChunk
+from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.models.mcp import MCPAuditLog
 from app.models.payment import PaymentOrder
 from app.models.refund import RefundOrder
@@ -142,9 +142,7 @@ def overview(db: Session) -> dict:
         or 0
     )
 
-    knowledge_documents = (
-        db.query(func.count(func.distinct(KnowledgeChunk.doc_id))).scalar() or 0
-    )
+    knowledge_documents = db.query(func.count(KnowledgeDocument.id)).scalar() or 0
     knowledge_chunks = db.query(func.count(KnowledgeChunk.id)).scalar() or 0
 
     return {
@@ -207,56 +205,6 @@ def statistics(db: Session, days: int = 30) -> dict:
         "net": round(sum(row["net"] for row in rows), 2),
         "occupancy_rate": round(actual / kennels * 100, 1) if kennels else 0,
         "actual_occupied": actual, "kennel_total": kennels,
-    }
-
-
-def list_knowledge(
-    db: Session,
-    *,
-    keyword: str | None = None,
-    page: int = 1,
-    page_size: int = 20,
-) -> dict:
-    page, page_size = _pagination(page, page_size)
-
-    query = db.query(KnowledgeChunk)
-    if keyword and keyword.strip():
-        like = f"%{keyword.strip()}%"
-        query = query.filter(
-            or_(
-                KnowledgeChunk.title.like(like),
-                KnowledgeChunk.content.like(like),
-                KnowledgeChunk.doc_id.like(like),
-            )
-        )
-
-    total = query.count()
-    rows = (
-        query.order_by(KnowledgeChunk.doc_id, KnowledgeChunk.chunk_index)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    items = []
-    for chunk in rows:
-        meta = chunk.meta or {}
-        items.append(
-            {
-                "id": chunk.id,
-                "doc_id": chunk.doc_id,
-                "chunk_index": chunk.chunk_index,
-                "title": chunk.title,
-                "category": meta.get("category"),
-                "source": meta.get("source"),
-                "content": chunk.content,
-                "has_embedding": bool(chunk.embedding),
-            }
-        )
-    return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
     }
 
 

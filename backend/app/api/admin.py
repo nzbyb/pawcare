@@ -8,13 +8,21 @@ from app.common.response import Response
 from app.database import get_db
 from app.dependencies.auth import get_current_admin
 from app.models.user import User
+from app.rag.retriever import KNOWLEDGE_CATEGORIES
 from app.schemas.admin import UserStatusUpdate
 from app.schemas.content import AnnouncementCreate, AnnouncementUpdate, FeedbackReply
+from app.schemas.knowledge import (
+    KnowledgeDocumentCreate,
+    KnowledgeDocumentUpdate,
+    KnowledgeHitTestQuery,
+    KnowledgeStatusUpdate,
+)
 from app.schemas.system import SettingUpdateRequest
 from app.services import (
     admin_service,
     content_service,
     export_service,
+    knowledge_service,
     setting_service,
 )
 
@@ -41,16 +49,115 @@ def get_statistics(
 @router.get("/knowledge", response_model=Response)
 def list_knowledge(
     keyword: str | None = Query(default=None, max_length=50),
+    category: str | None = Query(default=None, max_length=30),
+    status: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=50),
     current_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     return Response.success(
-        data=admin_service.list_knowledge(
-            db, keyword=keyword, page=page, page_size=page_size
+        data=knowledge_service.list_documents(
+            db,
+            keyword=keyword,
+            category=category,
+            status=status,
+            page=page,
+            page_size=page_size,
         )
     )
+
+
+@router.get("/knowledge/categories", response_model=Response)
+def knowledge_categories(current_user: User = Depends(get_current_admin)):
+    return Response.success(data=sorted(KNOWLEDGE_CATEGORIES))
+
+
+@router.post("/knowledge/test", response_model=Response)
+def knowledge_hit_test(
+    data: KnowledgeHitTestQuery,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=knowledge_service.hit_test(db, **data.model_dump()))
+
+
+@router.post("/knowledge", response_model=Response)
+def create_knowledge(
+    data: KnowledgeDocumentCreate,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    document = knowledge_service.create_document(db, current_user, data.model_dump())
+    return Response.success(
+        message="知识文档已创建",
+        data={
+            "doc_id": document.doc_id,
+            "chunk_count": document.chunk_count,
+            "needs_embedding": True,
+        },
+    )
+
+
+@router.get("/knowledge/{doc_id}", response_model=Response)
+def knowledge_detail(
+    doc_id: str,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=knowledge_service.document_detail(db, doc_id))
+
+
+@router.put("/knowledge/{doc_id}", response_model=Response)
+def update_knowledge(
+    doc_id: str,
+    data: KnowledgeDocumentUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    document = knowledge_service.update_document(
+        db, current_user, doc_id, data.model_dump()
+    )
+    return Response.success(
+        message="知识文档已更新",
+        data={"doc_id": document.doc_id, "chunk_count": document.chunk_count},
+    )
+
+
+@router.put("/knowledge/{doc_id}/status", response_model=Response)
+def update_knowledge_status(
+    doc_id: str,
+    data: KnowledgeStatusUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    document = knowledge_service.set_status(db, current_user, doc_id, data.status)
+    return Response.success(
+        message="文档状态已更新", data={"doc_id": document.doc_id, "status": document.status}
+    )
+
+
+@router.post("/knowledge/{doc_id}/reindex", response_model=Response)
+def reindex_knowledge(
+    doc_id: str,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = knowledge_service.reindex(db, current_user, doc_id)
+    message = "重建完成"
+    if result["mode"] != "hybrid":
+        message = f"切片已重建，向量未生成：{result['error']}"
+    return Response.success(message=message, data=result)
+
+
+@router.delete("/knowledge/{doc_id}", response_model=Response)
+def delete_knowledge(
+    doc_id: str,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    knowledge_service.delete_document(db, current_user, doc_id)
+    return Response.success(message="知识文档已删除")
 
 
 @router.get("/users", response_model=Response)

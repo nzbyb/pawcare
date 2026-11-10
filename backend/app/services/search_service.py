@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.common.exceptions import BusinessException
 from app.models.boarding import BoardingOrder, Kennel
 from app.models.content import Announcement
-from app.models.knowledge import KnowledgeChunk
+from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.models.pet import Pet
 from app.models.user import User
 from app.services import content_service
@@ -111,8 +111,10 @@ def _search_announcements(db: Session, user: User, like: str, limit: int) -> lis
 def _search_knowledge(db: Session, like: str, limit: int) -> list[dict]:
     rows = (
         db.query(KnowledgeChunk)
+        .join(KnowledgeDocument, KnowledgeDocument.doc_id == KnowledgeChunk.doc_id)
         .filter(
-            or_(KnowledgeChunk.title.like(like), KnowledgeChunk.content.like(like))
+            KnowledgeDocument.status == "published",
+            or_(KnowledgeChunk.title.like(like), KnowledgeChunk.content.like(like)),
         )
         .order_by(KnowledgeChunk.doc_id, KnowledgeChunk.chunk_index)
         .limit(limit)

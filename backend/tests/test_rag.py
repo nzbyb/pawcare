@@ -1,33 +1,10 @@
-from uuid import uuid4
-
 from app.models.knowledge import KnowledgeChunk
 from app.rag import retriever
-from tests.fakes import BrokenEmbedder, FakeEmbedder
-
-
-def add_chunk(
-    db,
-    *,
-    title: str,
-    content: str,
-    category: str = "boarding",
-    source: str = "测试知识库",
-) -> KnowledgeChunk:
-    chunk = KnowledgeChunk(
-        doc_id=f"test-{uuid4().hex[:10]}",
-        chunk_index=0,
-        title=title,
-        content=content,
-        meta={"category": category, "source": source},
-    )
-    db.add(chunk)
-    db.commit()
-    db.refresh(chunk)
-    return chunk
+from tests.fakes import BrokenEmbedder, FakeEmbedder, add_knowledge
 
 
 def test_hybrid_search_persists_embedding(db, monkeypatch):
-    chunk = add_chunk(
+    chunk = add_knowledge(
         db,
         title="寄养准备测试",
         content="测试甲：寄养前准备疫苗本和牵引绳。",
@@ -51,13 +28,13 @@ def test_hybrid_search_persists_embedding(db, monkeypatch):
 
 
 def test_search_filters_category(db, monkeypatch):
-    boarding = add_chunk(
+    boarding = add_knowledge(
         db,
         title="寄养分类",
         content="测试乙：寄养准备清单。",
         category="boarding",
     )
-    nutrition = add_chunk(
+    nutrition = add_knowledge(
         db,
         title="营养分类",
         content="测试乙：换粮过渡。",
@@ -75,7 +52,7 @@ def test_search_filters_category(db, monkeypatch):
 
 
 def test_search_falls_back_to_lexical(db, monkeypatch):
-    chunk = add_chunk(
+    chunk = add_knowledge(
         db,
         title="寄养准备要带什么",
         content="寄养前准备疫苗本、常用粮和牵引绳。",
@@ -91,7 +68,7 @@ def test_search_falls_back_to_lexical(db, monkeypatch):
 
 
 def test_search_returns_empty_for_unrelated_query(db, monkeypatch):
-    add_chunk(
+    add_knowledge(
         db,
         title="寄养准备",
         content="测试丙：寄养需要带疫苗本。",

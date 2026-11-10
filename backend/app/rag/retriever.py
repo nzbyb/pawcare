@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.knowledge import KnowledgeChunk
+from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.rag.embedding import (
     Embedder,
     EmbeddingError,
@@ -50,6 +50,8 @@ class RetrievedChunk:
     content: str
     score: float
     meta: dict
+    vector_score: float = 0.0
+    lexical_score: float = 0.0
 
     def payload(self) -> dict:
         source = (self.meta or {}).get("source") or "PawCare 护理知识库"
@@ -67,6 +69,7 @@ class RetrievedChunk:
 class RetrievalResult:
     chunks: list[RetrievedChunk]
     mode: str  # hybrid / lexical / empty
+    min_score: float = 0.0
 
     @property
     def found(self) -> bool:
@@ -116,7 +119,14 @@ def _embed_missing(
 
 
 def _load_chunks(db: Session, category: str | None) -> list[KnowledgeChunk]:
-    chunks = db.query(KnowledgeChunk).order_by(KnowledgeChunk.id.asc()).all()
+    # 只检索已发布文档的切片：归档后文档保留内容但不参与召回。
+    query = (
+        db.query(KnowledgeChunk)
+        .join(KnowledgeDocument, KnowledgeDocument.doc_id == KnowledgeChunk.doc_id)
+        .filter(KnowledgeDocument.status == "published")
+        .order_by(KnowledgeChunk.id.asc())
+    )
+    chunks = query.all()
     if category:
         chunks = [
             chunk
@@ -131,6 +141,7 @@ def search(
     query: str,
     top_k: int | None = None,
     category: str | None = None,
+    apply_threshold: bool = True,
 ) -> RetrievalResult:
     query = (query or "").strip()
     if not query:
@@ -156,17 +167,18 @@ def search(
             chunks = _load_chunks(db, category)
 
     query_tokens = _tokens(query)
-    scored: list[tuple[float, KnowledgeChunk]] = []
+    scored: list[tuple[float, float, float, KnowledgeChunk]] = []
     for chunk in chunks:
         lexical = _lexical_score(query_tokens, f"{chunk.title} {chunk.content}")
+        vector_score = 0.0
         if query_vector is not None and chunk.embedding:
             vector_score = max(0.0, _cosine(query_vector, chunk.embedding))
             score = VECTOR_WEIGHT * vector_score + LEXICAL_WEIGHT * lexical
         else:
             score = lexical
-        scored.append((score, chunk))
+        scored.append((score, vector_score, lexical, chunk))
 
-    scored.sort(key=lambda item: (item[0], -item[1].id), reverse=True)
+    scored.sort(key=lambda item: (item[0], -item[3].id), reverse=True)
     min_score = (
         settings.RAG_MIN_SCORE if query_vector is not None else LEXICAL_MIN_SCORE
     )
@@ -178,8 +190,10 @@ def search(
             content=chunk.content,
             score=score,
             meta=chunk.meta or {},
+            vector_score=vector_score,
+            lexical_score=lexical,
         )
-        for score, chunk in scored[:limit]
-        if score >= min_score
+        for score, vector_score, lexical, chunk in scored[:limit]
+        if not apply_threshold or score >= min_score
     ]
-    return RetrievalResult(selected, mode)
+    return RetrievalResult(selected, mode, min_score)

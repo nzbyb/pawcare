@@ -1,6 +1,7 @@
 import uuid
 
-from app.models.knowledge import KnowledgeChunk
+from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
+from tests.fakes import add_knowledge
 from tests.test_boarding import create_draft, create_kennel, day
 from tests.test_pets import create_pet
 
@@ -37,17 +38,15 @@ def test_admin_overview_aggregates_counts(client, admin_headers, owner_credentia
     assert data["reminders"]["pending"] >= 0
 
 
-def test_admin_lists_knowledge_chunks(client, admin_headers, db):
+def test_admin_lists_knowledge_documents(client, admin_headers, db):
     doc_id = f"doc-{uuid.uuid4().hex[:8]}"
-    chunk = KnowledgeChunk(
+    add_knowledge(
+        db,
         doc_id=doc_id,
-        chunk_index=0,
         title="疫苗后的观察要点",
         content="接种后留院观察三十分钟，注意精神与食欲变化。",
-        meta={"category": "vaccine", "source": "测试知识库"},
+        category="vaccine",
     )
-    db.add(chunk)
-    db.commit()
     try:
         body = client.get(
             "/api/admin/knowledge",
@@ -61,10 +60,15 @@ def test_admin_lists_knowledge_chunks(client, admin_headers, db):
         assert item["title"] == "疫苗后的观察要点"
         assert item["category"] == "vaccine"
         assert item["source"] == "测试知识库"
-        assert item["has_embedding"] is False
+        assert item["chunk_count"] == 1
+        assert item["missing_embedding"] == 1
+        assert item["needs_reindex"] is False
     finally:
         # 测试库会话级共享，清理后避免影响 RAG 检索用例。
-        db.delete(chunk)
+        db.query(KnowledgeChunk).filter(KnowledgeChunk.doc_id == doc_id).delete()
+        db.query(KnowledgeDocument).filter(
+            KnowledgeDocument.doc_id == doc_id
+        ).delete()
         db.commit()
 
 

@@ -22,13 +22,13 @@ from app.models.boarding import (
     Kennel,
 )
 from app.models.content import Announcement
-from app.models.knowledge import KnowledgeChunk
+from app.models.knowledge import KnowledgeDocument
 from app.models.payment import PaymentOrder
 from app.models.pet import Pet, WeightRecord
 from app.models.user import User
 from app.rag.retriever import KNOWLEDGE_CATEGORIES
 from app.schemas.health import HealthRecordCreate
-from app.services import health_service
+from app.services import health_service, knowledge_service
 from app.utils.password import hash_password
 
 TODAY = date.today()
@@ -386,27 +386,22 @@ def seed_knowledge(db) -> int:
     created = 0
     for item in KNOWLEDGE_DOCS:
         exists = (
-            db.query(KnowledgeChunk)
-            .filter(
-                KnowledgeChunk.doc_id == item["doc_id"],
-                KnowledgeChunk.chunk_index == 0,
-            )
+            db.query(KnowledgeDocument)
+            .filter(KnowledgeDocument.doc_id == item["doc_id"])
             .first()
         )
         if exists:
             continue
-        db.add(
-            KnowledgeChunk(
-                doc_id=item["doc_id"],
-                chunk_index=0,
-                title=item["title"],
-                content=item["content"],
-                meta={
-                    "category": item["category"],
-                    "source": item["source"],
-                },
-            )
+        document = KnowledgeDocument(
+            doc_id=item["doc_id"],
+            category=item["category"],
+            title=item["title"],
+            content=item["content"],
+            source=item["source"],
         )
+        db.add(document)
+        # 复用维护端的切片规则，保证脚本灌入和后台新建的知识切法一致。
+        knowledge_service.rebuild_chunks(db, document)
         created += 1
     if created:
         db.commit()
