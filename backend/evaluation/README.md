@@ -116,3 +116,51 @@ foreach ($v in 'full','no_tools','no_rag','no_permission','no_citation','no_draf
 `no_tools` 会发送不带 `tools` 字段的请求；`no_draft_confirmation` 放在消融用例最后，
 因为它可能真的在评测副本里创建订单。
 
+
+## 知识库召回评测
+
+`retrieval_eval.py` 只测“召回”本身：直接调用生产检索器 `app.rag.retriever.search`，
+不经过 Agent 和模型，因此结果不会受模型随机性影响，适合在论文里作为 RAG 的独立实验。
+
+```powershell
+cd backend
+$env:PYTHONIOENCODING = 'utf-8'
+
+# 只校验用例
+.\.venv\Scripts\python.exe evaluation\retrieval_eval.py --dry-run
+
+# 混合 + 纯词法各跑一遍（默认）
+.\.venv\Scripts\python.exe evaluation\retrieval_eval.py
+
+# 只跑一个模式 / 一个分类
+.\.venv\Scripts\python.exe evaluation\retrieval_eval.py --mode lexical
+.\.venv\Scripts\python.exe evaluation\retrieval_eval.py --category boarding
+
+# 指定数据库（默认读取 .env 的 DATABASE_URL）
+.\.venv\Scripts\python.exe evaluation\retrieval_eval.py --database-url sqlite:///pawcare_dev.db
+```
+
+- 用例在 `retrieval_cases.yaml`：50 条问法，覆盖 14 篇合成护理知识 + 4 条拒答用例；
+  `expect_docs` 为空表示“不应召回任何知识”。`documents` 段登记文档标题，
+  引用了未登记的 doc_id 会在校验阶段报错。
+- 只读数据库；若切片还没有向量，检索器会按需补写 embedding（幂等）。
+- 报告写入 `evaluation/reports/retrieval_<时间戳>.json|.csv`，逐条记录召回文档与分数。
+
+| 指标 | 含义 |
+| --- | --- |
+| 命中@1 | 排第一的文档属于 `expect_docs` |
+| 命中@k | 前 k 条里出现任一可接受文档 |
+| MRR | 第一个可接受文档排名的倒数均值 |
+| 拒答率 | `expect_docs` 为空的用例中，没有召回任何切片 |
+| 平均首条得分 | 正例中 top-1 的检索分数 |
+
+在种子知识库（14 篇 / 14 切片）上的实测，`top_k=3`、`BAAI/bge-small-zh-v1.5`：
+
+| 模式 | 命中@1 | 命中@k | MRR | 拒答率 | 平均首条得分 |
+| --- | --- | --- | --- | --- | --- |
+| 混合（0.75 向量 + 0.25 词法） | 89.1% | 97.8% | 0.9312 | 100% | 0.5824 |
+| 纯词法（无向量） | 63.0% | 73.9% | 0.6775 | 100% | 0.3544 |
+
+唯一一条混合模式未命中是 `hard-allergy-001`（“狗耳朵老是红红的还一直抓”），
+其最高分低于 `RAG_MIN_SCORE=0.45` 被过滤——属于“宁可拒答也不编”的预期行为，
+但说明纯口语描述仍需要更细的切片或更低阈值来兜底。

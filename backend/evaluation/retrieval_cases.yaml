@@ -1,0 +1,245 @@
+# 知识库召回评测集。
+#
+# 每个用例是一句真实用户问法，expect_docs 是“可以接受的文档”（命中任一即可）。
+# expect_docs 为空表示该问题不应召回任何护理知识（拒答用例）。
+# 语料来自 scripts/seed.py 的 14 篇合成护理知识，改动知识库时同步更新这里。
+
+defaults:
+  top_k: 3
+
+documents:
+  boarding-prep: 寄养前准备清单
+  boarding-stress: 寄养应激与适应期
+  multi-pet: 多宠家庭寄养注意事项
+  vaccine-dog: 犬类疫苗与加强针
+  vaccine-cat: 猫三联与狂犬疫苗
+  deworm: 体内外驱虫频率
+  cat-food-switch: 猫咪换粮与软便
+  dog-weight: 犬只体重管理
+  medication: 在家喂药的安全做法
+  emergency: 需要立即就医的危险信号
+  heatstroke: 犬猫中暑的现场处理
+  senior-pet: 老年宠物照护
+  allergy: 食物过敏与皮肤瘙痒
+  cat-carrier: 猫咪出行与航空箱适应
+
+cases:
+  # ---------- 寄养 ----------
+  - id: boarding-001
+    category: boarding
+    query: 第一次送狗狗去寄养，要带什么东西？
+    expect_docs: [boarding-prep]
+  - id: boarding-002
+    category: boarding
+    query: 寄养的时候粮食怎么准备，要不要多带一点？
+    expect_docs: [boarding-prep]
+  - id: boarding-003
+    category: boarding
+    query: 毛孩子到了寄养的地方一直躲着不吃饭怎么办？
+    expect_docs: [boarding-stress]
+  - id: boarding-004
+    category: boarding
+    query: 寄养回家以后晚上一直叫，是不是应激了？
+    expect_docs: [boarding-stress]
+  - id: boarding-005
+    category: boarding
+    query: 家里两只狗一起送去寄养，需要注意什么？
+    expect_docs: [multi-pet]
+  - id: boarding-006
+    category: boarding
+    query: 多宠家庭寄养会不会打架，要不要分笼？
+    expect_docs: [multi-pet]
+  - id: boarding-007
+    category: boarding
+    query: 秋天要出差一周，寄养前要提前多久告诉宠物？
+    expect_docs: [boarding-prep, boarding-stress]
+
+  # ---------- 免疫 ----------
+  - id: vaccine-001
+    category: vaccine
+    query: 狗狗的疫苗多久打一次加强针？
+    expect_docs: [vaccine-dog]
+  - id: vaccine-002
+    category: vaccine
+    query: 送去犬舍寄养，狂犬疫苗必须在有效期内吗？
+    expect_docs: [vaccine-dog]
+  - id: vaccine-003
+    category: vaccine
+    query: 猫三联能预防哪些病？
+    expect_docs: [vaccine-cat]
+  - id: vaccine-004
+    category: vaccine
+    query: 一直养在室内的猫还需要打疫苗吗？
+    expect_docs: [vaccine-cat]
+  - id: vaccine-005
+    category: vaccine
+    query: 打完疫苗回家可以洗澡和剧烈运动吗？
+    expect_docs: [vaccine-dog, vaccine-cat]
+
+  # ---------- 驱虫 ----------
+  - id: deworm-001
+    category: deworm
+    query: 狗狗多久要做一次驱虫？
+    expect_docs: [deworm]
+  - id: deworm-002
+    category: deworm
+    query: 体内驱虫药和体外滴剂可以一起用吗？
+    expect_docs: [deworm]
+  - id: deworm-003
+    category: deworm
+    query: 驱虫以后流口水、精神不好要怎么办？
+    expect_docs: [deworm, medication]
+
+  # ---------- 营养 ----------
+  - id: nutrition-001
+    category: nutrition
+    query: 猫咪换粮怎么过渡才不会软便？
+    expect_docs: [cat-food-switch]
+  - id: nutrition-002
+    category: nutrition
+    query: 猫粮突然换了一个牌子，拉稀两天了怎么办？
+    expect_docs: [cat-food-switch]
+  - id: nutrition-003
+    category: nutrition
+    query: 怎么给超重的狗狗减肥比较安全？
+    expect_docs: [dog-weight]
+  - id: nutrition-004
+    category: nutrition
+    query: 狗狗体重下降很快，每周瘦多少算正常？
+    expect_docs: [dog-weight]
+
+  # ---------- 用药 ----------
+  - id: medication-001
+    category: medication
+    query: 怎么给猫喂药片，它总是吐出来。
+    expect_docs: [medication]
+  - id: medication-002
+    category: medication
+    query: 漏喂了一次药，下次要不要补双倍？
+    expect_docs: [medication]
+  - id: medication-003
+    category: medication
+    query: 人吃的感冒药可以给狗吃吗？
+    expect_docs: [medication]
+
+  # ---------- 急症 ----------
+  - id: emergency-001
+    category: emergency
+    query: 宠物出现什么情况需要立刻送医院？
+    expect_docs: [emergency]
+  - id: emergency-002
+    category: emergency
+    query: 狗误吃了异物，能自己在家催吐吗？
+    expect_docs: [emergency]
+  - id: emergency-003
+    category: emergency
+    query: 夏天狗中暑了，现场应该怎么急救？
+    expect_docs: [heatstroke]
+  - id: emergency-004
+    category: emergency
+    query: 中暑能不能用冰水给猫降温？
+    expect_docs: [heatstroke]
+  - id: emergency-005
+    category: emergency
+    query: 呼吸困难加上持续抽搐，算不算危险信号？
+    expect_docs: [emergency, heatstroke]
+
+  # ---------- 老年与过敏 ----------
+  - id: senior-001
+    category: senior
+    query: 老年犬需要多久体检一次？
+    expect_docs: [senior-pet]
+  - id: senior-002
+    category: senior
+    query: 老猫饮水量变多、晚上总叫，要不要看医生？
+    expect_docs: [senior-pet]
+  - id: allergy-001
+    category: allergy
+    query: 狗狗一直挠痒痒、耳朵发红，是不是食物过敏？
+    expect_docs: [allergy]
+  - id: allergy-002
+    category: allergy
+    query: 怎么排查猫的食物过敏，要吃多久特殊饮食？
+    expect_docs: [allergy]
+
+  # ---------- 猫咪出行 ----------
+  - id: cat-001
+    category: cat
+    query: 怎么让猫习惯航空箱？
+    expect_docs: [cat-carrier]
+  - id: cat-002
+    category: cat
+    query: 带猫坐车去医院，路上要注意什么？
+    expect_docs: [cat-carrier]
+
+  # ---------- 拒答：不该召回护理知识 ----------
+  - id: negative-001
+    category: negative
+    query: 今天北京的天气怎么样？
+    expect_docs: []
+  - id: negative-002
+    category: negative
+    query: 帮我写一首关于秋天的诗。
+    expect_docs: []
+  - id: negative-003
+    category: negative
+    query: 明天股票会涨吗？
+    expect_docs: []
+  - id: negative-004
+    category: negative
+    query: 从郑州到上海的高铁要坐多久？
+    expect_docs: []
+
+  # ---------- 困难问法：刻意不用文档原词 ----------
+  - id: hard-boarding-001
+    category: boarding
+    query: 寄养要带它平时吃饭的碗吗？
+    expect_docs: [boarding-prep]
+  - id: hard-boarding-002
+    category: boarding
+    query: 猫寄养回来一直哈气，要多久才能好？
+    expect_docs: [boarding-stress]
+  - id: hard-boarding-003
+    category: boarding
+    query: 两只狗吃饭老抢，寄养时怎么安排？
+    expect_docs: [multi-pet]
+  - id: hard-vaccine-001
+    category: vaccine
+    query: 狗打完针当天能出门吗？
+    expect_docs: [vaccine-dog, vaccine-cat]
+  - id: hard-vaccine-002
+    category: vaccine
+    query: 猫不出门还要打针吗？
+    expect_docs: [vaccine-cat]
+  - id: hard-deworm-001
+    category: deworm
+    query: 狗子天天钻草丛，要不要定期除虫？
+    expect_docs: [deworm]
+  - id: hard-nutrition-001
+    category: nutrition
+    query: 狗吃太胖了跑不动，怎么减？
+    expect_docs: [dog-weight]
+  - id: hard-medication-001
+    category: medication
+    query: 喂药它老是吐泡泡，有什么办法？
+    expect_docs: [medication]
+  - id: hard-emergency-001
+    category: emergency
+    query: 狗突然抽个不停怎么办？
+    expect_docs: [emergency]
+  - id: hard-emergency-002
+    category: emergency
+    query: 狗夏天被关在车里闷到了怎么办？
+    expect_docs: [heatstroke]
+  - id: hard-senior-001
+    category: senior
+    query: 家里老狗半夜不睡、走路慢吞吞的。
+    expect_docs: [senior-pet]
+  - id: hard-allergy-001
+    category: allergy
+    query: 狗耳朵老是红红的还一直抓。
+    expect_docs: [allergy]
+  - id: hard-cat-001
+    category: cat
+    query: 猫咪托运要用什么箱子？
+    expect_docs: [cat-carrier]

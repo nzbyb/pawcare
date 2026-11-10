@@ -19,7 +19,7 @@ PawCare 是一套面向宠物寄养与健康管理场景的全栈系统，由业
 
 - 在线体验：<http://121.196.150.159>
 - 部署形态：阿里云 ECS（2C4G），Docker Compose 四容器 + Nginx
-- 质量保障：后端 pytest 169 条用例；Agent 评测 101 条用例；MCP 专项评测 10 条检查
+- 质量保障：后端 pytest 233 条用例；Agent 评测 101 条用例；知识库召回评测 50 条问法；MCP 专项评测 10 条检查
 
 ## 2. 功能概览
 
@@ -105,7 +105,7 @@ backend/
     utils/        # JWT、密码
   tests/
   migrations/     # Alembic
-  evaluation/     # Agent 评测与 MCP 专项评测
+  evaluation/     # Agent 评测、知识库召回评测与 MCP 专项评测
 frontend/
   src/
     api/          # axios 封装
@@ -357,6 +357,16 @@ baseline 与消融实验使用同一套用例切换变体：
 
 字段说明与扩展示例见 [backend/evaluation/README.md](backend/evaluation/README.md)。
 
+知识库召回评测不调用模型，直接测生产检索器，混合模式与纯词法模式各跑一遍：
+
+```powershell
+.\.venv\Scripts\python.exe evaluation/retrieval_eval.py --dry-run
+.\.venv\Scripts\python.exe evaluation/retrieval_eval.py
+```
+
+输出命中@1、命中@k、MRR、拒答率与未命中清单；在种子知识库（14 篇 / 50 条问法，top_k=3）上，
+混合检索命中@k 97.8%、纯词法 73.9%，报告写入 `evaluation/reports/retrieval_*`。
+
 调度引擎默认为显式循环；LangGraph 适配层用于对照实验（需安装 `requirements-agent.txt`）：
 
 ```powershell
@@ -458,7 +468,7 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 - [x] 统一工具注册表：本地 9 个 + 外部 MCP 只读工具（命名空间、注入过滤、故障降级）
 - [x] MCP HTTP 按用户限流 + `mcp_audit_logs` 调用审计 + 管理端查询
 - [x] MCP 专项评测：10 条检查（发现 / 隔离 / 注入 / 超时 / 结果上限 / 降级）
-- [x] 后端 pytest 226 条用例全部通过
+- [x] 后端 pytest 233 条用例全部通过
 - [x] baseline / 消融实验（无工具、去 RAG、去权限、去引用、去确认边界）
 - [x] LangGraph 对照适配层（`AGENT_ENGINE` / 评测 `--engine`，生产默认显式循环）
 - [x] 运营统计、退款审核、逾期占用与演示环境
@@ -467,6 +477,7 @@ MCP 专项评测不调用模型，直接验证工具发现、只读边界、身�
 - [x] 站内搜索、系统设置（门店信息）与登录日志
 - [x] 异常日报处置闭环：自动建单、认领、处置措施、兽医标记、告知宠物主、管理员重新打开
 - [x] Agent 运行可观测：工具成功率、P50 / P95 延迟、token 与成本估算、失败 trace 回放
+- [x] 知识库召回评测集：50 条问法 / 14 篇文档，混合与纯词法对照（命中@3 97.8% / 73.9%）
 
 ## 12. 说明
 
