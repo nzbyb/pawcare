@@ -5,7 +5,12 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.common.exceptions import BusinessException
-from app.models.boarding import BoardingDailyReport, BoardingOrder, Kennel
+from app.models.boarding import (
+    BoardingAbnormalCase,
+    BoardingDailyReport,
+    BoardingOrder,
+    Kennel,
+)
 from app.models.pet import Pet
 from app.models.user import User
 
@@ -30,6 +35,18 @@ def today_tasks(db: Session, user: User) -> dict:
         .all()
     ) if ids else []
     by_order = {report.order_id: report for report in reports}
+    report_ids = [report.id for report in reports]
+    cases = (
+        db.query(BoardingAbnormalCase)
+        .filter(BoardingAbnormalCase.report_id.in_(report_ids))
+        .all()
+    ) if report_ids else []
+    case_by_report = {case.report_id: case for case in cases}
+    handler_ids = {case.handler_id for case in cases if case.handler_id}
+    handler_names = {
+        user.id: (user.nickname or user.username)
+        for user in db.query(User).filter(User.id.in_(handler_ids)).all()
+    } if handler_ids else {}
     for order, pet_name, kennel_code in rows:
         item = {
             "order_id": order.id, "pet_id": order.pet_id, "pet_name": pet_name,
@@ -37,6 +54,8 @@ def today_tasks(db: Session, user: User) -> dict:
             "end_date": order.end_date, "status": order.status,
             "payment_status": order.payment_status,
             "report_id": None, "report_date": None, "abnormal_reasons": [],
+            "case_id": None, "case_status": None, "severity": None,
+            "handler_name": None,
         }
         if order.status == "pending" and order.end_date > today:
             groups["pending"].append(item)
@@ -57,8 +76,13 @@ def today_tasks(db: Session, user: User) -> dict:
             if report.spirit == "low":
                 reasons.append("精神低落")
             if reasons:
+                case = case_by_report.get(report.id)
                 groups["abnormal_reports"].append({
                     **item, "report_id": report.id, "report_date": report.report_date,
                     "abnormal_reasons": reasons,
+                    "case_id": case.id if case else None,
+                    "case_status": case.status if case else None,
+                    "severity": case.severity if case else None,
+                    "handler_name": handler_names.get(case.handler_id) if case and case.handler_id else None,
                 })
     return {"date": today, "counts": {key: len(items) for key, items in groups.items()}, **groups}

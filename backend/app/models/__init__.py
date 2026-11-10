@@ -1,6 +1,7 @@
 from app.models.agent import AgentConversation, AgentMessage, AgentToolCall
 from app.models.audit import AuditLog
 from app.models.boarding import (
+    BoardingAbnormalCase,
     BoardingDailyReport,
     BoardingDraft,
     BoardingOrder,
@@ -27,6 +28,7 @@ __all__ = [
     "AnnouncementRead",
     "AuditLog",
     "Attachment",
+    "BoardingAbnormalCase",
     "BoardingDailyReport",
     "BoardingDraft",
     "BoardingOrder",

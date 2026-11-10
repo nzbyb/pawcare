@@ -32,7 +32,7 @@ from app.schemas.boarding import (
     KennelCreate,
     KennelUpdate,
 )
-from app.services import boarding_health_service, notification_service
+from app.services import abnormal_service, boarding_health_service, notification_service
 
 # pending 的订单也占用档期，避免两个用户同时确认后撞车
 ACTIVE_ORDER_STATUSES = ("pending", "confirmed", "checked_in", "boarding")
@@ -720,6 +720,8 @@ def add_daily_report(
     db.add(report)
     db.flush()
     _audit(db, user.id, "boarding_report.create", "boarding_report", report.id)
+    # 异常项在同一事务里生成处置单，日报与待办不会出现「有异常没单」的中间态。
+    abnormal_service.sync_report_case(db, report, user.id)
     notification_service.create_notification(
         db,
         order.owner_id,

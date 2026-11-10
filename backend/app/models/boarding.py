@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -122,6 +123,57 @@ class BoardingDailyReport(Base):
     note: Mapped[str | None] = mapped_column(Text)
     photos: Mapped[list | None] = mapped_column(JsonType)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+
+class BoardingAbnormalCase(Base):
+    """异常日报处置单：一条日报最多一张单，形成「发现—认领—处置—告知」闭环。"""
+
+    __tablename__ = "boarding_abnormal_cases"
+    __table_args__ = (
+        Index("ix_abnormal_cases_status_time", "status", "create_time"),
+        {"comment": "异常日报处置单"},
+    )
+
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("boarding_orders.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    report_id: Mapped[int] = mapped_column(
+        ForeignKey("boarding_daily_reports.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+        nullable=False,
+        comment="来源日报，一条日报只生成一张处置单",
+    )
+    severity: Mapped[str] = mapped_column(
+        String(20), default="warning", nullable=False, index=True, comment="warning / critical"
+    )
+    reasons: Mapped[list | None] = mapped_column(
+        JsonType, comment="异常项代码列表：appetite_poor / stool_soft / stool_diarrhea / spirit_low"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="open",
+        nullable=False,
+        index=True,
+        comment="open / processing / resolved",
+    )
+    handler_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, comment="认领人"
+    )
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    action_taken: Mapped[str | None] = mapped_column(Text, comment="处置措施")
+    vet_contacted: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0", comment="是否已联系兽医"
+    )
+    owner_notified: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0", comment="是否已告知宠物主"
+    )
+    resolved_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), comment="处置人"
+    )
 
 
 class MedicationLog(Base):

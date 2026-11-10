@@ -8,6 +8,9 @@ from app.database import get_db
 from app.dependencies.auth import get_current_admin, get_current_user, require_roles
 from app.models.user import User
 from app.schemas.boarding import (
+    AbnormalCaseItem,
+    AbnormalCasePage,
+    AbnormalResolveRequest,
     BoardingDraftCreate,
     BoardingHealthCheck,
     BoardingTasks,
@@ -19,7 +22,12 @@ from app.schemas.boarding import (
     KennelSize,
     KennelUpdate,
 )
-from app.services import boarding_health_service, boarding_service, boarding_task_service
+from app.services import (
+    abnormal_service,
+    boarding_health_service,
+    boarding_service,
+    boarding_task_service,
+)
 
 router = APIRouter(tags=["寄养"])
 
@@ -45,6 +53,91 @@ def get_boarding_tasks(
     return Response.success(data=BoardingTasks.model_validate(
         boarding_task_service.today_tasks(db, current_user)
     ).model_dump())
+
+
+@router.get("/boarding/abnormal-cases", response_model=Response)
+def list_abnormal_cases(
+    status: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    order_id: int | None = Query(default=None, gt=0),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = abnormal_service.list_cases(
+        db,
+        current_user,
+        status=status,
+        severity=severity,
+        order_id=order_id,
+        page=page,
+        page_size=page_size,
+    )
+    return Response.success(data=AbnormalCasePage.model_validate(data).model_dump())
+
+
+@router.get("/boarding/abnormal-cases/{case_id}", response_model=Response)
+def get_abnormal_case(
+    case_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        data=AbnormalCaseItem.model_validate(
+            abnormal_service.case_detail(db, current_user, case_id)
+        ).model_dump()
+    )
+
+
+@router.post("/boarding/abnormal-cases/{case_id}/claim", response_model=Response)
+def claim_abnormal_case(
+    case_id: int,
+    current_user: User = Depends(require_roles("boarding_staff", "admin")),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        message="已认领，请在当天内完成处置",
+        data=AbnormalCaseItem.model_validate(
+            abnormal_service.claim(db, current_user, case_id)
+        ).model_dump(),
+    )
+
+
+@router.post("/boarding/abnormal-cases/{case_id}/resolve", response_model=Response)
+def resolve_abnormal_case(
+    case_id: int,
+    data: AbnormalResolveRequest,
+    current_user: User = Depends(require_roles("boarding_staff", "admin")),
+    db: Session = Depends(get_db),
+):
+    case = abnormal_service.resolve(
+        db,
+        current_user,
+        case_id,
+        action_taken=data.action_taken,
+        vet_contacted=data.vet_contacted,
+        notify_owner=data.notify_owner,
+    )
+    message = "处置已完成" + ("，已告知宠物主" if case["owner_notified"] and data.notify_owner else "")
+    return Response.success(
+        message=message,
+        data=AbnormalCaseItem.model_validate(case).model_dump(),
+    )
+
+
+@router.post("/boarding/abnormal-cases/{case_id}/reopen", response_model=Response)
+def reopen_abnormal_case(
+    case_id: int,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        message="处置单已重新打开",
+        data=AbnormalCaseItem.model_validate(
+            abnormal_service.reopen(db, current_user, case_id)
+        ).model_dump(),
+    )
 
 
 @router.get("/kennels", response_model=Response)

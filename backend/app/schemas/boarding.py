@@ -42,6 +42,10 @@ class BoardingTaskItem(BaseModel):
     report_id: int | None = None
     report_date: date | None = None
     abnormal_reasons: list[str] = Field(default_factory=list)
+    case_id: int | None = None
+    case_status: Literal["open", "processing", "resolved"] | None = None
+    severity: Literal["warning", "critical"] | None = None
+    handler_name: str | None = None
 
 
 class BoardingTasks(BaseModel):
@@ -172,6 +176,66 @@ class DailyReportResponse(BaseModel):
     note: str | None = None
     photos: list | None = None
     created_by: int | None = None
+
+
+class AbnormalReportSnapshot(BaseModel):
+    appetite: str | None = None
+    stool: str | None = None
+    spirit: str | None = None
+    note: str | None = None
+
+
+class AbnormalCaseItem(BaseModel):
+    id: int
+    order_id: int
+    report_id: int
+    report_date: date | None = None
+    pet_id: int | None = None
+    pet_name: str | None = None
+    kennel_code: str | None = None
+    order_status: str | None = None
+    owner_id: int | None = None
+    owner_name: str | None = None
+    severity: Literal["warning", "critical"]
+    severity_label: str
+    reasons: list[str] = Field(default_factory=list)
+    reason_labels: list[str] = Field(default_factory=list)
+    status: Literal["open", "processing", "resolved"]
+    handler_id: int | None = None
+    handler_name: str | None = None
+    claimed_at: datetime | None = None
+    resolved_at: datetime | None = None
+    resolved_by: int | None = None
+    resolver_name: str | None = None
+    action_taken: str | None = None
+    vet_contacted: bool = False
+    owner_notified: bool = False
+    report: AbnormalReportSnapshot = Field(default_factory=AbnormalReportSnapshot)
+    create_time: datetime | None = None
+
+
+class AbnormalCaseStats(BaseModel):
+    open: int
+    critical_open: int
+    resolved_recent: int
+    avg_resolve_minutes: float | None = None
+
+
+class AbnormalCasePage(BaseModel):
+    items: list[AbnormalCaseItem]
+    total: int
+    page: int
+    page_size: int
+    counts: dict[str, int]
+    stats: AbnormalCaseStats | None = None
+    today: date
+
+
+class AbnormalResolveRequest(BaseModel):
+    # 长度由服务层统一校验，这里只挡空值，避免前端拿到两套错误码。
+    action_taken: str = Field(min_length=1, max_length=500)
+    vet_contacted: bool = False
+    notify_owner: bool = True
 
 
 class HandoverHealthRecord(BaseModel):

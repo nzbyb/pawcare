@@ -19,6 +19,8 @@ def _alembic(tmp_path: Path, *args: str) -> subprocess.CompletedProcess:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
 
@@ -94,3 +96,50 @@ def test_upgrade_backfills_knowledge_documents(tmp_path: Path) -> None:
     assert source == "旧知识库"
     assert status == "published"
     assert chunk_count == 1
+
+
+def test_upgrade_backfills_abnormal_cases(tmp_path: Path) -> None:
+    """旧库的异常日报要补成处置单：今天的待处置，历史的标为已补录。"""
+    from datetime import date, timedelta
+
+    db_path = tmp_path / "migration.db"
+    before = _alembic(tmp_path, "upgrade", "a8d3f1c6b7e2")
+    assert before.returncode == 0, before.stderr
+
+    old_day = (date.today() - timedelta(days=30)).isoformat()
+    rows = ((old_day, "poor", "diarrhea"), (date.today().isoformat(), "normal", "soft"))
+    with sqlite3.connect(db_path) as conn:
+        for report_date, appetite, stool in rows:
+            conn.execute(
+                "INSERT INTO boarding_daily_reports "
+                "(create_time, update_time, order_id, report_date, appetite, stool, spirit, note, photos) "
+                "VALUES (datetime('now'), datetime('now'), 1, ?, ?, ?, 'good', '旧日报', NULL)",
+                (report_date, appetite, stool),
+            )
+        conn.commit()
+
+    upgraded = _alembic(tmp_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT r.report_date, c.severity, c.status, c.action_taken, c.reasons "
+            "FROM boarding_abnormal_cases c "
+            "JOIN boarding_daily_reports r ON r.id = c.report_id "
+            "ORDER BY r.report_date"
+        ).fetchall()
+
+    assert len(rows) == 2
+    old_date, old_severity, old_status, old_action, old_reasons = rows[0]
+    assert old_date == old_day
+    # 腹泻 + 食欲较差 → 紧急
+    assert old_severity == "critical"
+    assert old_status == "resolved"
+    assert old_action == "历史日报补录：未记录处置过程"
+    assert "stool_diarrhea" in old_reasons
+
+    _, today_severity, today_status, today_action, today_reasons = rows[1]
+    assert today_severity == "warning"
+    assert today_status == "open"
+    assert today_action is None
+    assert "stool_soft" in today_reasons
