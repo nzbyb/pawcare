@@ -115,7 +115,10 @@ POST /api/boarding/drafts/{id}/confirm
 
 ### 5.2 RAG 知识库
 
-- 数据：`knowledge_chunks` 存切片、标题、来源和 512 维向量；seed 写入 14 篇合成护理知识。
+- 数据：`knowledge_documents` 存文档（标题、正文、分类、来源、状态、内容摘要）；
+  `knowledge_chunks` 存切片、标题、来源和 512 维向量，通过 `doc_id` 外键归属文档。
+  切片由正文按句末标点自动生成，目标长度 300 字；改正文后整篇重建、向量置空，
+  由检索或管理端「重建索引」重新生成。seed 写入 14 篇合成护理知识。
 - 向量：fastembed `BAAI/bge-small-zh-v1.5`，首次检索时按需加载并缓存到 `backend/.fastembed_cache`
   （第一次会下载模型，之后离线可用）。
 - 检索：向量以 JSON 文本存库（MySQL `TEXT`），不依赖数据库扩展。先取候选切片，再按
@@ -200,7 +203,12 @@ MySQL 没有 PostgreSQL 的排他约束，因此不再建库级约束。
 | `PUT /api/admin/users/{id}/status` | 启用 / 停用账号 |
 | `GET /api/admin/kennels/occupancy` | 指定日期的笼舍占用与在住宠物 |
 | `GET /api/admin/audit-logs` | 只读审计日志，按操作前缀筛选 |
-| `GET /api/admin/knowledge` | 只读知识库切片，按标题 / 内容 / 文档 ID 检索；不暴露向量 |
+| `GET /api/admin/knowledge` | 分页检索知识文档（标题 / 正文 / 文档编号、分类、状态）；不暴露向量 |
+| `POST /api/admin/knowledge` | 新建文档并按正文生成切片 |
+| `PUT /api/admin/knowledge/{doc_id}` | 编辑文档；正文变化时重建切片并清空向量 |
+| `PUT /api/admin/knowledge/{doc_id}/status` | 归档 / 重新发布；归档后不参与 RAG 召回与站内搜索 |
+| `POST /api/admin/knowledge/{doc_id}/reindex` | 重建切片并重新生成向量，返回生成条数与模式 |
+| `POST /api/admin/knowledge/test` | 命中测试：返回召回切片、混合分、向量分、词法分与线上阈值 |
 
 - 概览与知识库都是聚合读，不新增写路径；统计口径直接来自业务表，不做缓存，
   避免管理端数字与实际订单状态不一致。

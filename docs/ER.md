@@ -194,9 +194,22 @@ erDiagram
         int token_out
     }
 
+    KNOWLEDGE_DOCUMENTS {
+        int id PK
+        string doc_id UK
+        string category
+        string title
+        text content
+        string source
+        string status
+        int chunk_count
+        string content_hash
+        datetime indexed_at
+    }
+
     KNOWLEDGE_CHUNKS {
         int id PK
-        string doc_id
+        string doc_id FK
         int chunk_index
         string title
         text content
@@ -221,6 +234,7 @@ erDiagram
 
 - `boarding_orders` 同一 `kennel_id` 的日期区间不得重叠：MySQL 无 `EXCLUDE` 约束，由应用层档期校验在确认事务中完成，并用笼舍行锁（`SELECT … FOR UPDATE`）串行化并发确认。
 - 向量列 `knowledge_chunks.embedding` 以 JSON 文本（512 维）存储，检索在应用层计算余弦相似度。
+- `knowledge_documents.doc_id` 唯一，切片通过同名 `doc_id` 外键归属文档（级联删除）；文档归档后切片保留但不参与检索。
 - `reminders.dedupe_key` 唯一，保证 APScheduler 重复扫描不会产生重复提醒。
 - `boarding_drafts.idempotency_key` 唯一，确认接口用它防重复下单。
 - 健康档案采用软删除（`deleted_at`），关键修改写 `audit_logs`。
