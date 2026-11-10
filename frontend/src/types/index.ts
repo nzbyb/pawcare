@@ -419,22 +419,70 @@ export interface AdminOverview {
   knowledge: { documents: number; chunks: number }
 }
 
+export type KnowledgeStatus = 'published' | 'archived'
+
+export interface KnowledgeDocumentItem {
+  doc_id: string
+  category: string
+  title: string
+  source: string
+  status: KnowledgeStatus
+  chunk_count: number
+  missing_embedding: number
+  needs_reindex: boolean
+  indexed_at?: string | null
+  update_time: string
+}
+
 export interface KnowledgeChunkItem {
   id: number
-  doc_id: string
   chunk_index: number
-  title: string
-  category?: string | null
-  source?: string | null
   content: string
   has_embedding: boolean
 }
 
+export interface KnowledgeDocumentDetail extends KnowledgeDocumentItem {
+  content: string
+  chunks: KnowledgeChunkItem[]
+}
+
 export interface KnowledgePage {
-  items: KnowledgeChunkItem[]
+  items: KnowledgeDocumentItem[]
   total: number
   page: number
   page_size: number
+}
+
+export interface KnowledgeHitItem {
+  chunk_id: number
+  doc_id: string
+  title: string
+  content: string
+  score: number
+  vector_score: number
+  lexical_score: number
+  passed: boolean
+  source?: string | null
+}
+
+export interface KnowledgeHitTest {
+  query: string
+  mode: 'hybrid' | 'lexical' | 'empty'
+  min_score: number
+  elapsed_ms: number
+  results: KnowledgeHitItem[]
+}
+
+export interface KnowledgeDocumentPayload {
+  category: string
+  title: string
+  content: string
+  source?: string | null
+}
+
+export interface KnowledgeCreatePayload extends KnowledgeDocumentPayload {
+  doc_id?: string | null
+  status?: KnowledgeStatus
 }
 
 

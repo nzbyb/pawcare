@@ -19,6 +19,7 @@ import {
 import AppIcon from '@/components/AppIcon.vue'
 import AdminAnnouncements from '@/components/AdminAnnouncements.vue'
 import AdminFeedback from '@/components/AdminFeedback.vue'
+import AdminKnowledge from '@/components/AdminKnowledge.vue'
 import AdminLoginLogs from '@/components/AdminLoginLogs.vue'
 import AdminSettings from '@/components/AdminSettings.vue'
 import AdminStatistics from '@/components/AdminStatistics.vue'
@@ -26,7 +27,6 @@ import {
   getAdminOverview,
   getKennelOccupancy,
   listAuditLogs,
-  listKnowledge,
   listUsers,
   updateUserStatus,
 } from '@/api/admin'
@@ -37,7 +37,6 @@ import type {
   AuditLogItem,
   KennelOccupancy,
   KennelOccupancyItem,
-  KnowledgeChunkItem,
   UserRole,
 } from '@/types'
 
@@ -456,115 +455,6 @@ async function loadOverview(): Promise<void> {
   }
 }
 
-/* ---------------------------- 知识库 ---------------------------- */
-
-const knowledgeItems = ref<KnowledgeChunkItem[]>([])
-const knowledgeTotal = ref(0)
-const knowledgePage = ref(1)
-const knowledgePageSize = 10
-const knowledgeKeyword = ref('')
-const knowledgeLoading = ref(false)
-
-const knowledgeColumns: DataTableColumns<KnowledgeChunkItem> = [
-  {
-    title: '标题',
-    key: 'title',
-    width: 190,
-    render: (row) =>
-      h(
-        'div',
-        { style: 'display:flex;min-width:0;flex-direction:column;line-height:1.35' },
-        [
-          h(
-            'strong',
-            {
-              style:
-                'overflow:hidden;font-size:12.5px;font-weight:600;text-overflow:ellipsis;white-space:nowrap',
-            },
-            row.title,
-          ),
-          h(
-            'span',
-            { style: 'color:var(--pc-ink-faint);font-size:10.5px' },
-            row.doc_id,
-          ),
-        ],
-      ),
-  },
-  {
-    title: '分类',
-    key: 'category',
-    width: 92,
-    render: (row) => row.category || '—',
-  },
-  {
-    title: '来源',
-    key: 'source',
-    width: 130,
-    render: (row) => row.source || '—',
-  },
-  {
-    title: '切片',
-    key: 'chunk_index',
-    width: 64,
-    render: (row) => `#${row.chunk_index + 1}`,
-  },
-  {
-    title: '内容摘要',
-    key: 'content',
-    minWidth: 320,
-    render: (row) =>
-      h(
-        'span',
-        {
-          title: row.content,
-          style:
-            'display:block;max-width:420px;overflow:hidden;color:var(--pc-ink-soft);font-size:12px;text-overflow:ellipsis;white-space:nowrap',
-        },
-        row.content,
-      ),
-  },
-  {
-    title: '向量',
-    key: 'has_embedding',
-    width: 72,
-    render: (row) =>
-      h(
-        'span',
-        { class: row.has_embedding ? 'pill sage' : 'pill grey' },
-        row.has_embedding ? '已生成' : '待生成',
-      ),
-  },
-]
-
-async function loadKnowledge(): Promise<void> {
-  knowledgeLoading.value = true
-  try {
-    const page = await listKnowledge({
-      keyword: knowledgeKeyword.value.trim() || undefined,
-      page: knowledgePage.value,
-      page_size: knowledgePageSize,
-    })
-    knowledgeItems.value = page.items
-    knowledgeTotal.value = page.total
-  } catch {
-    knowledgeItems.value = []
-    knowledgeTotal.value = 0
-  } finally {
-    knowledgeLoading.value = false
-  }
-}
-
-function searchKnowledge(): void {
-  knowledgePage.value = 1
-  void loadKnowledge()
-}
-
-function changeKnowledgePage(page: number): void {
-  knowledgePage.value = page
-  void loadKnowledge()
-}
-
 /* ---------------------------- 切换 ---------------------------- */
 
 function onTabChange(name: string | number): void {
@@ -576,8 +466,6 @@ function onTabChange(name: string | number): void {
     void loadOccupancy()
   } else if (name === 'audit') {
     void loadLogs()
-  } else if (name === 'knowledge') {
-    void loadKnowledge()
   }
 }
 
@@ -863,45 +751,7 @@ onMounted(() => {
       </n-tab-pane>
 
       <n-tab-pane name="knowledge" tab="知识库">
-        <div class="toolbar">
-          <n-input
-            v-model:value="knowledgeKeyword"
-            placeholder="搜索标题 / 内容 / 文档 ID"
-            clearable
-            style="width: 280px"
-            @keyup.enter="searchKnowledge"
-            @clear="searchKnowledge"
-          >
-            <template #prefix><AppIcon name="search" :size="14" /></template>
-          </n-input>
-          <n-button quaternary @click="searchKnowledge">查询</n-button>
-          <span class="toolbar-total">只读 · 共 {{ knowledgeTotal }} 个切片</span>
-        </div>
-
-        <div class="table-card">
-          <n-spin :show="knowledgeLoading">
-            <n-data-table
-              :columns="knowledgeColumns"
-              :data="knowledgeItems"
-              :row-key="(row: KnowledgeChunkItem) => row.id"
-              :bordered="false"
-              :scroll-x="900"
-              size="small"
-            />
-            <div v-if="!knowledgeLoading && !knowledgeItems.length" class="empty-wrap">
-              <n-empty description="没有匹配的知识条目" />
-            </div>
-          </n-spin>
-        </div>
-
-        <div class="pager">
-          <n-pagination
-            :page="knowledgePage"
-            :page-size="knowledgePageSize"
-            :item-count="knowledgeTotal"
-            @update:page="changeKnowledgePage"
-          />
-        </div>
+        <AdminKnowledge />
       </n-tab-pane>
 
       <n-tab-pane name="announcements" tab="公告">
