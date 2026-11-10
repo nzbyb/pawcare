@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "deepseek-flash"
     LLM_BASE_URL: str = "https://api.deepseek.com"
+    # 模型单价（元 / 百万 token），只用于可观测面板估算成本。
+    # 留 0 表示未配置：面板显示「未配置单价」，而不是拿一个过期价格硬算。
+    LLM_PRICE_INPUT_PER_M: float = 0.0
+    LLM_PRICE_OUTPUT_PER_M: float = 0.0
 
     # ---------- 邮箱 / 短信验证码 ----------
     # QQ 邮箱：smtp.qq.com / 465 / SSL；SMTP_PASSWORD 填授权码，不是登录密码。

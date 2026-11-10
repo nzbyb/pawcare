@@ -195,6 +195,9 @@ erDiagram
         json tool_calls
         string tool_call_id
         string trace_id
+        int token_in
+        int token_out
+        int latency_ms
     }
 
     AGENT_TOOL_CALLS {
@@ -255,6 +258,11 @@ erDiagram
 - `knowledge_documents.doc_id` 唯一，切片通过同名 `doc_id` 外键归属文档（级联删除）；文档归档后切片保留但不参与检索。
 - `boarding_abnormal_cases.report_id` 唯一：一条异常日报只生成一张处置单，状态
   `open / processing / resolved` 单向推进，管理员可重新打开；认领人字段允许为空（直接处置时补填）。
+- `agent_messages.trace_id` 与 `agent_tool_calls.trace_id` 对应同一轮对话，管理端
+  「Agent 运行」面板按它做 trace 回放；`assistant` 消息的 `token_in / token_out /
+  latency_ms` 是模型用量的事实来源，工具调用不重复计 token。
+- 模型单价（`LLM_PRICE_*_PER_M`）是部署配置，不建表：面板按当前单价估算成本，
+  留 0 时显示「未配置单价」。
 - `reminders.dedupe_key` 唯一，保证 APScheduler 重复扫描不会产生重复提醒。
 - `boarding_drafts.idempotency_key` 唯一，确认接口用它防重复下单。
 - 健康档案采用软删除（`deleted_at`），关键修改写 `audit_logs`。

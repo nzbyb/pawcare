@@ -1,6 +1,9 @@
 import { request } from './http'
 import type {
   AdminOverview,
+  AgentOverview,
+  AgentToolCallPage,
+  AgentTrace,
   AdminUserPage,
   AuditLogPage,
   KennelOccupancy,
@@ -116,4 +119,27 @@ export function hitTestKnowledge(payload: {
   category?: string
 }): Promise<KnowledgeHitTest> {
   return request.post<KnowledgeHitTest>('/admin/knowledge/test', payload)
+}
+
+export interface AgentToolCallQuery {
+  status?: 'ok' | 'error'
+  tool_name?: string
+  keyword?: string
+  days?: number
+  page?: number
+  page_size?: number
+}
+
+export function getAgentOverview(days: number): Promise<AgentOverview> {
+  return request.get<AgentOverview>('/admin/agent/overview', { params: { days } })
+}
+
+export function listAgentToolCalls(
+  params: AgentToolCallQuery,
+): Promise<AgentToolCallPage> {
+  return request.get<AgentToolCallPage>('/admin/agent/tool-calls', { params })
+}
+
+export function getAgentTrace(traceId: string): Promise<AgentTrace> {
+  return request.get<AgentTrace>(`/admin/agent/traces/${traceId}`)
 }

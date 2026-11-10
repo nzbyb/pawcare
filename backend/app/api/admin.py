@@ -20,6 +20,7 @@ from app.schemas.knowledge import (
 from app.schemas.system import SettingUpdateRequest
 from app.services import (
     admin_service,
+    agent_metrics_service,
     content_service,
     export_service,
     knowledge_service,
@@ -44,6 +45,48 @@ def get_statistics(
     db: Session = Depends(get_db),
 ):
     return Response.success(data=admin_service.statistics(db, days))
+
+
+@router.get("/agent/overview", response_model=Response)
+def get_agent_overview(
+    days: int = Query(default=7, ge=1, le=90),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=agent_metrics_service.overview(db, days))
+
+
+@router.get("/agent/tool-calls", response_model=Response)
+def list_agent_tool_calls(
+    status: str | None = Query(default=None, pattern="^(ok|error)$"),
+    tool_name: str | None = Query(default=None, max_length=50),
+    keyword: str | None = Query(default=None, max_length=64),
+    days: int = Query(default=30, ge=1, le=90),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(
+        data=agent_metrics_service.list_tool_calls(
+            db,
+            status=status,
+            tool_name=tool_name,
+            keyword=keyword,
+            days=days,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get("/agent/traces/{trace_id}", response_model=Response)
+def get_agent_trace(
+    trace_id: str,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return Response.success(data=agent_metrics_service.trace_detail(db, trace_id))
 
 
 @router.get("/knowledge", response_model=Response)

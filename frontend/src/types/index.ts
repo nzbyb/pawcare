@@ -670,3 +670,118 @@ export interface SearchResult {
   total: number
   groups: SearchGroup[]
 }
+
+export interface AgentMetricsDaily {
+  date: string
+  turns: number
+  tool_calls: number
+  tool_errors: number
+  token_in: number
+  token_out: number
+}
+
+export interface AgentToolMetric {
+  tool_name: string
+  calls: number
+  errors: number
+  success_rate: number | null
+  avg_latency_ms: number
+  max_latency_ms: number
+}
+
+export interface AgentErrorCode {
+  error_code: string
+  count: number
+}
+
+export interface AgentRecentFailure {
+  id: number
+  trace_id: string
+  conversation_id: number | null
+  tool_name: string
+  error_code: string | null
+  latency_ms: number | null
+  create_time: string
+}
+
+export interface AgentCost {
+  input: number
+  output: number
+  total: number
+  configured: boolean
+  price_input_per_m: number
+  price_output_per_m: number
+}
+
+export interface AgentOverview {
+  range: { days: number; start_date: string; end_date: string }
+  conversations: number
+  turns: number
+  tool_calls: number
+  tool_errors: number
+  tool_success_rate: number | null
+  tool_latency_p95_ms: number | null
+  tool_latency_p50_ms: number | null
+  turn_latency_p95_ms: number | null
+  tokens: { input: number; output: number; total: number }
+  cost: AgentCost
+  daily: AgentMetricsDaily[]
+  tools: AgentToolMetric[]
+  error_codes: AgentErrorCode[]
+  recent_failures: AgentRecentFailure[]
+}
+
+export interface AgentToolCallItem {
+  id: number
+  trace_id: string
+  conversation_id: number | null
+  message_id: number | null
+  tool_name: string
+  arguments: Record<string, unknown> | null
+  result_summary: string | null
+  status: 'ok' | 'error'
+  error_code: string | null
+  latency_ms: number | null
+  create_time: string
+}
+
+export interface AgentToolCallPage {
+  items: AgentToolCallItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface AgentTraceMessage {
+  id: number
+  role: 'user' | 'assistant' | 'tool' | 'system'
+  content: string
+  tool_calls: unknown[] | Record<string, unknown> | null
+  tool_call_id: string | null
+  latency_ms: number | null
+  token_in: number | null
+  token_out: number | null
+  create_time: string
+}
+
+export interface AgentTrace {
+  trace_id: string
+  conversation: {
+    id: number
+    title: string
+    user_id: number
+    username: string
+    nickname: string | null
+    role: UserRole
+  } | null
+  messages: AgentTraceMessage[]
+  tool_calls: AgentToolCallItem[]
+  summary: {
+    status: 'ok' | 'error'
+    tool_calls: number
+    errors: number
+    latency_ms: number
+    token_in: number
+    token_out: number
+  }
+}

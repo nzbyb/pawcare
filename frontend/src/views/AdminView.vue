@@ -17,6 +17,7 @@ import {
 } from 'naive-ui'
 
 import AppIcon from '@/components/AppIcon.vue'
+import AdminAgent from '@/components/AdminAgent.vue'
 import AdminAnnouncements from '@/components/AdminAnnouncements.vue'
 import AdminFeedback from '@/components/AdminFeedback.vue'
 import AdminKnowledge from '@/components/AdminKnowledge.vue'
@@ -42,6 +43,7 @@ import type {
 
 type TabName =
   | 'overview'
+  | 'agent'
   | 'users'
   | 'kennels'
   | 'audit'
@@ -576,6 +578,10 @@ onMounted(() => {
             <n-empty description="暂时没有可展示的统计数据" />
           </div>
         </n-spin>
+      </n-tab-pane>
+
+      <n-tab-pane name="agent" tab="Agent 运行">
+        <AdminAgent />
       </n-tab-pane>
 
       <n-tab-pane name="users" tab="用户管理">
